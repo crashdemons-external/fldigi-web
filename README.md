@@ -4,6 +4,8 @@ Fldigi web is a browser-based, receive-only port of selected [fldigi](https://ww
 
 The project builds 163 receive modes from fldigi 4.2.13, including CW, PSK, RTTY, MFSK, Olivia, MT63, Hellschreiber, WEFAX, and DTMF. Audio is decoded locally in the browser using WebAssembly; no radio transmission or rig control is provided.
 
+**Live demo:** [Fldigi Web](https://crashdemons-external.github.io/fldigi-web/)
+
 The UI workflow catalog is in [web/workflow.json](web/workflow.json), with DOM IDs
 mapped to `decode`, `encode`, `rig`, and `util` tags. See
 [web/workflow.md](web/workflow.md) for classification rules and ID conventions.
