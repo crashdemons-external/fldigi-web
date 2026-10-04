@@ -188,7 +188,7 @@ async function startLive(){
   if(live||openingLive){stopLive();status('Live audio stopped');return;}
   const generation=++sourceGeneration;openingLive=true;captureDeviceSelection=settings.inputDevice;
   try{
-    ensureReady();resetAudioPipeline('none');audio.pause();await context();if(generation!==sourceGeneration)return;status('Waiting for microphone permission…');
+    ensureReady();resetAudioPipeline('none');if(fileUrl)closeFile();await context();if(generation!==sourceGeneration)return;status('Waiting for microphone permission…');
     const capture=await navigator.mediaDevices.getUserMedia({audio:{deviceId:captureDeviceSelection==='default'?undefined:{exact:captureDeviceSelection},echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false});
     if(generation!==sourceGeneration){capture.getTracks().forEach(track=>track.stop());return;}
     stream=capture;resetAudioPipeline('live');liveSource=audioContext.createMediaStreamSource(stream);({worklet:liveWorklet,gain:liveGain}=connectInput(liveSource,false));
@@ -203,12 +203,22 @@ async function loadFile(file){
     const selectedUrl=fileUrl;await context();if(fileUrl!==selectedUrl)return;if(!fileSource){fileSource=audioContext.createMediaElementSource(audio);({worklet:fileWorklet,gain:fileGain}=connectInput(fileSource,true));}if(audio.paused)status(`${file.name} · Press ▶ to play and decode`);}
   catch(error){status(error.message,true);}
 }
-async function togglePlayback(){try{ensureReady();stopLive();await context();if(audio.paused)await audio.play();else audio.pause();}catch(error){status(error.message,true);}}
+async function togglePlayback(){
+  if(!fileUrl||live||openingLive)return;
+  const selectedUrl=fileUrl;
+  try{ensureReady();await context();if(fileUrl!==selectedUrl||live||openingLive)return;if(audio.paused)await audio.play();else audio.pause();}
+  catch(error){if(fileUrl===selectedUrl&&!live&&!openingLive)status(error.message,true);}
+}
+function closeFile(){
+  if(activeInput==='file')resetAudioPipeline('none');
+  const previousUrl=fileUrl;fileUrl=undefined;audio.pause();audio.removeAttribute('src');audio.load();if(previousUrl)URL.revokeObjectURL(previousUrl);
+  $('playback-bar').hidden=true;$('file-name').textContent=$('file-name').title='';$('file-position').value=0;$('file-time').textContent='0:00 / 0:00';$('source-indicator').textContent=live?'LIVE':'RX';syncPlaybackButton();
+}
 function stopAudio(){stopLive();resetAudioPipeline('none');audio.pause();if(fileUrl&&audio.currentTime!==0)audio.currentTime=0;status('Audio stopped');}
 function formatTime(seconds){if(!Number.isFinite(seconds))return '0:00';return Math.floor(seconds/60)+':'+String(Math.floor(seconds%60)).padStart(2,'0');}
 function syncPlaybackButton(){const playing=!audio.paused&&!audio.ended;$('play-file').textContent=playing?'Ⅱ':'▶';$('play-file').setAttribute('aria-label',playing?'Pause playback':'Play audio file');$('play-file').title=playing?'Pause playback':'Play audio file';}
 for(const eventName of ['play','pause','ended','emptied'])audio.addEventListener(eventName,syncPlaybackButton);
-audio.addEventListener('play',()=>{if(activeInput!=='file')resetAudioPipeline('file');fileWorklet?.port.postMessage({active:!audio.seeking,generation:audioGeneration});$('source-indicator').textContent='FILE';status('Playing and decoding: '+$('file-name').textContent);});
+audio.addEventListener('play',()=>{if(!fileUrl||live||openingLive){audio.pause();return;}if(activeInput!=='file')resetAudioPipeline('file');fileWorklet?.port.postMessage({active:!audio.seeking,generation:audioGeneration});$('source-indicator').textContent='FILE';status('Playing and decoding: '+$('file-name').textContent);});
 audio.addEventListener('pause',()=>{if(!audio.paused||activeInput!=='file'||audio.seeking)return;fileWorklet?.port.postMessage({command:'flush',generation:audioGeneration});if(fileUrl)status('Audio playback paused');});
 audio.addEventListener('timeupdate',()=>{$('file-position').value=Number.isFinite(audio.duration)?audio.currentTime/audio.duration*1000:0;$('file-time').textContent=formatTime(audio.currentTime)+' / '+formatTime(audio.duration);});
 audio.addEventListener('loadedmetadata',()=>{$('file-time').textContent='0:00 / '+formatTime(audio.duration);});
@@ -224,7 +234,7 @@ function setSpeakerIcon(muted){
   const use=document.createElementNS('http://www.w3.org/2000/svg','use');use.setAttribute('href','icons/fontawesome.svg#'+(muted?'volume-xmark':'volume-high'));svg.append(use);$('file-mute').replaceChildren(svg);
 }
 $('file-mute').addEventListener('click',()=>{const muted=$('file-mute').getAttribute('aria-pressed')!=='true';$('file-mute').setAttribute('aria-pressed',String(muted));setSpeakerIcon(muted);if(fileGain)fileGain.gain.value=muted?0:settings.playbackVolume;});
-$('close-file').addEventListener('click',()=>{if(activeInput==='file')resetAudioPipeline('none');audio.pause();audio.removeAttribute('src');audio.load();if(fileUrl)URL.revokeObjectURL(fileUrl);fileUrl=undefined;$('playback-bar').hidden=true;$('source-indicator').textContent=live?'LIVE':'RX';status(live?'Live audio capture active':'Receiver ready');});
+$('close-file').addEventListener('click',()=>{closeFile();status(live?'Live audio capture active':'Receiver ready');});
 $('rx-button').addEventListener('click',startLive);$('source-indicator').addEventListener('click',()=>fileUrl?togglePlayback():startLive());
 function download(name,data,type){const url=URL.createObjectURL(new Blob([data],{type}));const link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);status('Download requested: '+name);}
 function drawRaster(columns,height){
@@ -272,7 +282,7 @@ const actions={
   'clear-channels':()=>{postDecoder({type:'clear-channels'});channelRows.forEach(row=>{row.children[0].textContent=row.children[1].textContent='';});},
   'audio-info':showAudioInfo,'build-info':showBuildInfo,
   'event-log':()=>showMessage('Event log',eventLog.map(entry=>`${entry.time}  ${entry.error?'ERROR':'INFO'}  ${entry.message}`).join('\n')||'No events recorded in this session.','fldigi-event-log.txt'),
-  help:()=>showMessage('fldigi browser receiver','Use File → Audio → Playback (load audio file) to select a recording, then press ▶. Choose RX capture (use mic), click Rx, or press F3 for live microphone or audio-device input. TX generate (save audio file) is disabled for now.\n\nSelect the signal mode under Op Mode, then click a signal in the waterfall to tune. AFC follows frequency drift. SQL suppresses output below the selected signal threshold.\n\nDTMF is at the bottom of Op Mode, below the separator. It exclusively decodes keypad tones using fixed audio frequencies; tuning is inactive. The squelch threshold always applies. Switching modes disables DTMF.\n\nConfigure → Sound card chooses the input channel, input device, gain, and sample-rate correction. Configuration is saved in this browser. File exports download a file; imports use a file picker.\n\nCapture requires HTTPS or localhost. Audio remains on this computer. Transmission, rig control, and external application connections are disabled. Decoder state resets when seeking in a recording.'),
+  help:()=>showMessage('fldigi browser receiver','Use File → Audio → Playback (load audio file) to select a recording, then press ▶. Choose RX capture (use mic), click Rx, or press F3 for live microphone or audio-device input. Starting mic capture closes the loaded recording; loading a recording stops mic capture. TX generate (save audio file) is disabled for now.\n\nSelect the signal mode under Op Mode, then click a signal in the waterfall to tune. AFC follows frequency drift. SQL suppresses output below the selected signal threshold.\n\nDTMF is at the bottom of Op Mode, below the separator. It exclusively decodes keypad tones using fixed audio frequencies; tuning is inactive. The squelch threshold always applies. Switching modes disables DTMF.\n\nConfigure → Sound card chooses the input channel, input device, gain, and sample-rate correction. Configuration is saved in this browser. File exports download a file; imports use a file picker.\n\nCapture requires HTTPS or localhost. Audio remains on this computer. Transmission, rig control, and external application connections are disabled. Decoder state resets when seeking in a recording.'),
   about:()=>showMessage('About fldigi','fldigi 4.2.13-alpha0 · Browser receive port\n\nOriginal fldigi modem and DSP sources by Dave Freese, W1HKJ, and the fldigi contributors. Compiled with Emscripten.\n\nGNU GPL version 3 or later. Corresponding source and build scripts are included in this project. See COPYING and THIRD_PARTY_NOTICES.md.\n\nThis version supports microphone input and local audio-file playback. Unavailable modes and desktop controls are shown disabled.\n\nIcons: original fldigi artwork and Font Awesome Free 7.2.0 by Fonticons, Inc. (CC BY 4.0). See THIRD_PARTY_NOTICES.md and icons/fontawesome/LICENSE.txt for the icon notices.'),
 };
 document.querySelectorAll('[data-action]').forEach(button=>button.addEventListener('click',()=>{closeMenus();actions[button.dataset.action]?.();}));
