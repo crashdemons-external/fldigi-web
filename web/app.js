@@ -5,6 +5,8 @@ import {appendReceivedText} from './received-text.js';
 import {createScope} from './scope.js';
 
 const $ = id => document.getElementById(id);
+// Stable IDs for dynamically created controls cataloged in workflow.json.
+const controlId = (prefix,name) => prefix+'-'+encodeURIComponent(name);
 // fldigi 4.2.13 comments out its OFDM Op Mode submenu pending development;
 // its generated mode table still contains these entries and unavailable utility modes.
 const sourceDisabledModes=new Set(['OFDM500F','OFDM750F','OFDM3500']);
@@ -118,23 +120,23 @@ function buildModeMenu(){
   $('mode-options').replaceChildren();
   for(const [name,group]of groups){
     const speedMenu=speedPresetMenus[name];
-    if(group.length===1&&name!=='RTTY'&&!speedMenu){const button=document.createElement('button');button.textContent=displayModeName(group[0]);button.disabled=!group[0].enabled;button.addEventListener('click',()=>selectMode(group[0]));$('mode-options').append(button);continue;}
-    const parent=document.createElement('div');parent.className='mode-family menu-branch';const heading=document.createElement('button');heading.className='family-heading submenu-heading';heading.textContent=name;heading.disabled=group.every(m=>!m.enabled);heading.setAttribute('aria-haspopup','true');heading.setAttribute('aria-expanded','false');parent.append(heading);
+    if(group.length===1&&name!=='RTTY'&&!speedMenu){const button=document.createElement('button');button.id=controlId('mode',group[0].name);button.textContent=displayModeName(group[0]);button.disabled=!group[0].enabled;button.addEventListener('click',()=>selectMode(group[0]));$('mode-options').append(button);continue;}
+    const parent=document.createElement('div');parent.className='mode-family menu-branch';const heading=document.createElement('button');heading.id=controlId('mode-family',name);heading.className='family-heading submenu-heading';heading.textContent=name;heading.disabled=group.every(m=>!m.enabled);heading.setAttribute('aria-haspopup','true');heading.setAttribute('aria-expanded','false');parent.append(heading);
     const submenu=document.createElement('div');submenu.className='mode-submenu menu-submenu';
     if(name==='RTTY'){
-      for(const preset of rttyPresets){const button=document.createElement('button');button.textContent=preset.label;button.addEventListener('click',()=>{for(const key of ['rttyBaud','rttyShift','rttyBits'])settings[key]=preset[key];selectMode(group[0]);});submenu.append(button);}
-      submenu.append(document.createElement('hr'));const custom=document.createElement('button');custom.textContent='Custom...';custom.addEventListener('click',()=>{selectMode(group[0]);openConfig('Modem/RTTY');});submenu.append(custom);
+      for(const preset of rttyPresets){const button=document.createElement('button');button.id=controlId('mode-preset',preset.label);button.textContent=preset.label;button.addEventListener('click',()=>{for(const key of ['rttyBaud','rttyShift','rttyBits'])settings[key]=preset[key];selectMode(group[0]);});submenu.append(button);}
+      submenu.append(document.createElement('hr'));const custom=document.createElement('button');custom.id='mode-rtty-custom';custom.textContent='Custom...';custom.addEventListener('click',()=>{selectMode(group[0]);openConfig('Modem/RTTY');});submenu.append(custom);
     }else if(speedMenu){
-      for(const [label,value] of speedMenu.presets){const button=document.createElement('button');button.textContent=label;button.addEventListener('click',()=>{settings[speedMenu.setting]=value;selectMode(group[0]);});submenu.append(button);}
-    }else for(const mode of group){const button=document.createElement('button');button.textContent=displayModeName(mode);button.disabled=!mode.enabled;button.addEventListener('click',()=>selectMode(mode));submenu.append(button);}
+      for(const [label,value] of speedMenu.presets){const button=document.createElement('button');button.id=controlId('mode-preset',label);button.textContent=label;button.addEventListener('click',()=>{settings[speedMenu.setting]=value;selectMode(group[0]);});submenu.append(button);}
+    }else for(const mode of group){const button=document.createElement('button');button.id=controlId('mode',mode.name);button.textContent=displayModeName(mode);button.disabled=!mode.enabled;button.addEventListener('click',()=>selectMode(mode));submenu.append(button);}
     parent.append(submenu);$('mode-options').append(parent);
   }
   const dtmf=modes.find(mode=>mode.family==='DTMF'&&selectableMode(mode));
-  if(dtmf){const button=document.createElement('button');button.textContent=displayModeName(dtmf);button.addEventListener('click',()=>selectMode(dtmf));$('mode-options').append(document.createElement('hr'),button);}
+  if(dtmf){const button=document.createElement('button');button.id=controlId('mode',dtmf.name);button.textContent=displayModeName(dtmf);button.addEventListener('click',()=>selectMode(dtmf));$('mode-options').append(document.createElement('hr'),button);}
   bindMenuBranches($('mode-options'));
 }
 function selectMode(mode){settings.modeName=mode.name;settings.mode=mode.id;applySettings();closeMenus();status(`${displayModeName(mode)} · ${live?'Live audio':fileUrl?'Audio file ready':'Receiver ready'}`);}
-const channelRows=Array.from({length:30},()=>{const row=document.createElement('div');row.className='channel-row';const f=document.createElement('span');f.className='channel-frequency';const text=document.createElement('span');row.append(f,text);row.addEventListener('click',()=>{if(row.dataset.frequency)tune(row.dataset.frequency);});$('channel-list').append(row);return row;});
+const channelRows=Array.from({length:30},(_,index)=>{const row=document.createElement('div');row.id=controlId('channel-row',index+1);row.className='channel-row';const f=document.createElement('span');f.className='channel-frequency';const text=document.createElement('span');row.append(f,text);row.addEventListener('click',()=>{if(row.dataset.frequency)tune(row.dataset.frequency);});$('channel-list').append(row);return row;});
 const worker=new Worker(new URL('./decoder-worker.js',import.meta.url),{type:'module'});
 worker.onerror=event=>{status('Decoder failed to start. Run the Emscripten build and serve this page over localhost or HTTPS.',true);console.error(event.message);};
 worker.onmessage=({data})=>{
@@ -367,10 +369,10 @@ function renderTree(){
   function addSection(container,name,disabled,children=[]){
     const row=document.createElement('div');row.className='tree-row';
     if(children.length){
-      const toggle=document.createElement('button');toggle.className='tree-toggle';toggle.dataset.section=name;toggle.textContent=collapsedSections.has(name)?'⊞':'⊟';toggle.setAttribute('aria-label',`${collapsedSections.has(name)?'Expand':'Collapse'} ${name}`);toggle.setAttribute('aria-expanded',String(!collapsedSections.has(name)));toggle.disabled=Boolean(disabled);
+      const toggle=document.createElement('button');toggle.id=controlId('config-expand',name);toggle.className='tree-toggle';toggle.dataset.section=name;toggle.textContent=collapsedSections.has(name)?'⊞':'⊟';toggle.setAttribute('aria-label',`${collapsedSections.has(name)?'Expand':'Collapse'} ${name}`);toggle.setAttribute('aria-expanded',String(!collapsedSections.has(name)));toggle.disabled=Boolean(disabled);
       toggle.addEventListener('click',()=>{if(collapsedSections.has(name))collapsedSections.delete(name);else collapsedSections.add(name);renderTree();Array.from(tree.querySelectorAll('.tree-toggle')).find(button=>button.dataset.section===name)?.focus();});row.append(toggle);
     }else{const connector=document.createElement('span');connector.className='tree-connector';connector.textContent='┊';connector.setAttribute('aria-hidden','true');row.append(connector);}
-    const button=document.createElement('button');button.textContent=name.split('/').at(-1);button.className='tree-label';button.disabled=Boolean(disabled);button.classList.toggle('active',name===configPage);button.dataset.page=name;
+    const button=document.createElement('button');button.id=controlId('config-page',name);button.textContent=name.split('/').at(-1);button.className='tree-label';button.disabled=Boolean(disabled);button.classList.toggle('active',name===configPage);button.dataset.page=name;
     button.addEventListener('click',()=>{configPage=name==='Configure'?'Operator-Station':name==='Soundcard'?'Soundcard/Devices':name==='Modem'?'Modem/PSK':name;renderTree();renderConfigPage();});row.append(button);container.append(row);
     if(children.length){const group=document.createElement('div');group.className='tree-children';group.hidden=collapsedSections.has(name);group.setAttribute('role','group');group.setAttribute('aria-label',name+' sections');for(const [child,unavailable]of children)addSection(group,child,unavailable,configSections.filter(([section])=>section.startsWith(child+'/')));container.append(group);}
   }
@@ -395,7 +397,7 @@ function renderConfigPage(){
     const selected=devices.some(d=>d.deviceId===configDraft.inputDevice)||configDraft.inputDevice==='default'?[]:[[configDraft.inputDevice,'Saved input (currently unavailable)']];
     body.append(fieldset('Audio input',[configField('Capture','inputDevice','text',[['default','Default audio input'],...selected,...devices.filter(d=>d.deviceId!=='default').map((d,i)=>[d.deviceId,d.label||'Audio input '+(i+1)])]),note('Microphone permission is requested when live capture starts. Saving a different device restarts active capture.'),...(live?[note('Active input: '+(stream?.getAudioTracks()[0]?.label||'Audio input'))]:[])]));
     const unsupported=fieldset('Desktop audio backends',[configField('OSS','oss','checkbox',null,true),configField('PortAudio','portaudio','checkbox',null,true),configField('PulseAudio','pulseaudio','checkbox',null,true)]);body.append(unsupported);
-    const refresh=document.createElement('button');refresh.textContent='Refresh devices';refresh.addEventListener('click',refreshDevices);body.append(refresh,note('Browser audio is processed locally by the fldigi receiver.'));
+    const refresh=document.createElement('button');refresh.id='refresh-audio-devices';refresh.textContent='Refresh devices';refresh.addEventListener('click',refreshDevices);body.append(refresh,note('Browser audio is processed locally by the fldigi receiver.'));
   }else if(configPage==='Soundcard/Right channel'){body.append(fieldset('Receive channel',[configField('Signal channel','channel','text',[['left','Left channel'],['right','Right channel'],['mix','Mix both channels']])]));}
   else if(configPage==='Soundcard/Settings'){body.append(fieldset('Sample rate',[configField('Capture','captureRate','text',[['native','Native']],true),configField('Playback','playbackRate','text',[['native','Native']],true),note('Band-limited converter → original modem sample rate')]));body.append(fieldset('Corrections',[configField('RX ppm','rxPpm','number'),configField('TX ppm','txPpm','number',null,true),configField('TX offset','txOffset','number',null,true)]));}
   else if(configPage==='Soundcard/Signal Level'){body.append(fieldset('Signal level',[configField('Receive gain (dB)','inputGain','number'),configField('Playback volume','playbackVolume','number'),note('Receive gain affects decoding. Playback volume affects the speakers.')]));}
