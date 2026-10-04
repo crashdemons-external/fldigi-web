@@ -1,0 +1,37 @@
+# Supplied reference archives and local toolchain; prepared source and assets
+# live in vendor/ and web/ and are intended to be committed.
+/reference/
+/.tools/
+
+# Compiler output, packages, and local previews.
+/build/
+/dist/
+/out/
+/web/fldigi-web-source.zip
+
+# Local editor settings and operating-system files.
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Dependency installs and Python caches/environments.
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Logs and private local configuration.
+*.log
+.env
+.env.*
+!.env.example
+*.private
+.private
+AGENTS.md
+PORTING_INSTRUCTIONS.md
+

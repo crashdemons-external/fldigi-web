@@ -1,0 +1,8 @@
+{
+  "archive": "fldigi-source.zip",
+  "sha256": "3840c28caced2e66e86976fbc7d2f72555f6b5ff4a02404100cf88f6eefadcac",
+  "version": "4.2.13",
+  "renamed_paths": {
+    "flarq_doxygen/user_src_doc/aux/ARQ2.pdf": "flarq_doxygen/user_src_doc/_aux/ARQ2.pdf"
+  }
+}

@@ -1,0 +1,142 @@
+{
+  "fldigi": {
+    "fldigi_icon": {
+      "source": "vendor/fldigi/src/misc/pixmaps.cxx",
+      "dimensions": [
+        "48",
+        "48"
+      ],
+      "license": "See original fldigi source notices"
+    },
+    "start_here_icon": {
+      "source": "vendor/fldigi/src/misc/pixmaps_tango.cxx",
+      "dimensions": [
+        "16",
+        "16"
+      ],
+      "license": "Public domain (Tango)"
+    },
+    "help_browser_icon": {
+      "source": "vendor/fldigi/src/misc/pixmaps_tango.cxx",
+      "dimensions": [
+        "16",
+        "16"
+      ],
+      "license": "Public domain (Tango)"
+    },
+    "net_icon": {
+      "source": "vendor/fldigi/src/misc/pixmaps_tango.cxx",
+      "dimensions": [
+        "16",
+        "16"
+      ],
+      "license": "Public domain (Tango)"
+    },
+    "pskr_icon": {
+      "source": "vendor/fldigi/src/misc/pixmaps.cxx",
+      "dimensions": [
+        "16",
+        "16"
+      ],
+      "license": "See original fldigi source notices"
+    },
+    "utilities_terminal_icon": {
+      "source": "vendor/fldigi/src/misc/pixmaps_tango.cxx",
+      "dimensions": [
+        "16",
+        "16"
+      ],
+      "license": "Public domain (Tango)"
+    },
+    "audio_card_icon": {
+      "source": "vendor/fldigi/src/misc/pixmaps.cxx",
+      "dimensions": [
+        "16",
+        "16"
+      ],
+      "license": "See original fldigi source notices"
+    },
+    "executable_icon": {
+      "source": "vendor/fldigi/src/misc/pixmaps_tango.cxx",
+      "dimensions": [
+        "16",
+        "16"
+      ],
+      "license": "Public domain (Tango)"
+    },
+    "dialog_information_icon": {
+      "source": "vendor/fldigi/src/misc/pixmaps_tango.cxx",
+      "dimensions": [
+        "16",
+        "16"
+      ],
+      "license": "Public domain (Tango)"
+    },
+    "help_about_icon": {
+      "source": "vendor/fldigi/src/misc/pixmaps.cxx",
+      "dimensions": [
+        "16",
+        "16"
+      ],
+      "license": "See original fldigi source notices"
+    },
+    "edit_clear_icon": {
+      "source": "vendor/fldigi/src/misc/pixmaps_tango.cxx",
+      "dimensions": [
+        "16",
+        "16"
+      ],
+      "license": "Public domain (Tango)"
+    },
+    "save_icon": {
+      "source": "vendor/fldigi/src/misc/pixmaps_tango.cxx",
+      "dimensions": [
+        "16",
+        "16"
+      ],
+      "license": "Public domain (Tango)"
+    },
+    "text_icon": {
+      "source": "vendor/fldigi/src/misc/pixmaps_tango.cxx",
+      "dimensions": [
+        "16",
+        "16"
+      ],
+      "license": "Public domain (Tango)"
+    },
+    "tango_view_refresh": {
+      "source": "vendor/fldigi/src/misc/pixmaps.cxx",
+      "dimensions": [
+        "16",
+        "16"
+      ],
+      "license": "See original fldigi source notices"
+    }
+  },
+  "fontawesome": {
+    "archiveSha256": "218d19fdec1bd898d1c78683f3c72e71bcc9e5f9bb3e065f99a5c3cdc48e0d66",
+    "version": "7.2.0",
+    "icons": [
+      "solid/microphone",
+      "solid/file-audio",
+      "solid/gear",
+      "solid/broom",
+      "solid/volume-high",
+      "solid/volume-xmark",
+      "solid/book-open",
+      "solid/circle-question",
+      "solid/globe",
+      "solid/satellite-dish",
+      "solid/terminal",
+      "solid/microchip",
+      "solid/code",
+      "solid/lightbulb",
+      "solid/star",
+      "solid/rotate",
+      "solid/file-lines",
+      "brands/github"
+    ],
+    "license": "CC BY 4.0",
+    "changes": "None to original SVG files; paths bundled into an SVG symbol sprite."
+  }
+}
