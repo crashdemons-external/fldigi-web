@@ -2,13 +2,13 @@ const profiles={encode:['encode'],decode:['decode'],both:['encode','decode'],ful
 
 export function parseWorkflow(search=''){
   const value=new URLSearchParams(search).get('workflow');
-  return Object.hasOwn(profiles,value)?value:'decode';
+  return Object.hasOwn(profiles,value)?value:'both';
 }
 
 // Workflow tags unlock even the planned controls; temporary modem restrictions
 // remain separate so rebuilding the UI cannot accidentally re-enable them.
 export function createWorkflowFilter(catalog,workflow,document){
-  const tags=new Set(profiles[workflow]||profiles.decode),original=new WeakMap(),runtime=new Set();
+  const tags=new Set(profiles[workflow]||profiles.both),original=new WeakMap(),runtime=new Set();
   const includes=tag=>tags.has(tag);
   const allows=id=>!Object.hasOwn(catalog,id)||catalog[id].some(includes);
   function apply(){

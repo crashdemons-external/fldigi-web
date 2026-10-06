@@ -7,7 +7,7 @@ const html=fs.readFileSync(new URL('../web/index.html',import.meta.url),'utf8');
 const staticControls=new Map([...html.matchAll(/<([a-z][\w-]*)\b([^>]*)>/gi)]
   .filter(match=>/\bid="/.test(match[2])).map(([,tag,attrs])=>[/\bid="([^"]+)"/.exec(attrs)[1],{tag,attrs}]));
 
-for(const value of ['', '?workflow=', '?workflow=invalid', '?workflow=toString', '?other=encode'])assert.equal(parseWorkflow(value),'decode');
+for(const value of ['', '?workflow=', '?workflow=invalid', '?workflow=toString', '?other=encode'])assert.equal(parseWorkflow(value),'both');
 for(const value of ['encode','decode','both','full'])assert.equal(parseWorkflow('?other=1&workflow='+value),value);
 
 class Element{

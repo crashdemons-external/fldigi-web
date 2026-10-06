@@ -12,8 +12,9 @@ mapped to `decode`, `encode`, `rig`, and `util` tags. See
 
 ## Generate and play transmit audio
 
-The default `?workflow=decode` keeps encoding disabled. Use `?workflow=encode`,
-`?workflow=both`, or `?workflow=full` to enable it.
+The default `?workflow=both` enables encoding and decoding. Use
+`?workflow=encode`, `?workflow=decode`, or `?workflow=full` to select another
+workflow.
 
 Compose text in the TX pane and select an Op Mode and audio frequency. **File →
 Audio → TX generate** opens a review dialog. **Generate** captures the text and
@@ -52,8 +53,8 @@ case and DTMF accepts keypad characters and pauses. WEFAX image generation,
 TxID/RxID, rig control, and native application integrations are not implemented.
 
 Choose the UI workflow with `?workflow=encode`, `?workflow=decode`,
-`?workflow=both`, or `?workflow=full`. The default is `decode`; unknown values
-also use `decode`. `both` enables the union of encoding and decoding controls;
+`?workflow=both`, or `?workflow=full`. The default is `both`; unknown values
+also use `both`. `both` enables the union of encoding and decoding controls;
 `full` includes rig and utility controls. Encode-only blocks recording playback,
 microphone capture, and decoding. Matching controls are enabled even when their
 underlying feature is still planned; rig control remains unimplemented. Enabled transmit text and macro colors follow the

@@ -81,7 +81,8 @@ function applySettings(persist=true){
   document.documentElement.style.setProperty('--tx',settings.txColor);
   $('rx-text').style.fontFamily=`${settings.rxFont}, monospace`;$('rx-text').style.fontSize=settings.rxFontSize+'px';$('tx-text').style.fontSize=settings.rxFontSize+'px';
   $('rx-text').style.whiteSpace=settings.rxWrap?'pre-wrap':'pre';$('rx-text').wrap=settings.rxWrap?'soft':'off';
-  $('window-title').textContent=workflow==='decode'?'fldigi - NO CALLSIGN SET (receive-only alpha)':`fldigi - NO CALLSIGN SET (${workflow} workflow)`;
+  const titleSuffix=workflow==='both'?'encode/decode':`${workflow} workflow`;
+  $('window-title').textContent=`fldigi - NO CALLSIGN SET (${titleSuffix})`;
   document.title=$('window-title').textContent;
   $('tx-text').setAttribute('aria-label',encodeEnabled?'Transmit text':'Transmit text (disabled)');
   $('tx-text').title=encodeEnabled?'Compose text for TX generate or realtime playback. During TX, append text at the end; T/R finishes the session.':'Transmission is disabled in this receive version';

@@ -68,12 +68,12 @@ from the URL's `workflow` query argument:
 
 | URL value | Enabled tags |
 | --- | --- |
-| `decode` (default) | `decode` |
+| `decode` | `decode` |
 | `encode` | `encode` |
-| `both` | `encode`, `decode` |
+| `both` (default) | `encode`, `decode` |
 | `full` | `encode`, `decode`, `rig`, `util` |
 
-Missing or unknown values select `decode`. Matching controls are enabled even if
+Missing or unknown values select `both`. Matching controls are enabled even if
 they were disabled in the original receive-only UI; this includes RxID, KPSQL,
 Store, and planned transmit/rig controls. Enabling a control does not implement
 its underlying feature. Text audio generation and realtime TX are implemented;
