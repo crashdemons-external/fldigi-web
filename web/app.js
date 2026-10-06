@@ -486,7 +486,8 @@ function drawRaster(columns,height){
   if(rasterCanvas.width!==width||rasterCanvas.height<height*4){rasterCanvas.width=width;rasterCanvas.height=Math.max(height*4,rasterCanvas.clientHeight);ctx.fillStyle='#fff';ctx.fillRect(0,0,rasterCanvas.width,rasterCanvas.height);rasterX=rasterY=0;}
   for(let offset=0;offset+height<=columns.length;offset+=height){
     if(rasterX>=width){rasterX=0;rasterY+=height+4;if(rasterY+height>rasterCanvas.height){ctx.drawImage(rasterCanvas,0,-height-4);rasterY-=height+4;ctx.fillStyle='#fff';ctx.fillRect(0,rasterY,width,height+4);}}
-    const image=ctx.createImageData(1,height);for(let y=0;y<height;y++){const i=y*4;image.data[i]=image.data[i+1]=image.data[i+2]=columns[offset+y];image.data[i+3]=255;}ctx.putImageData(image,rasterX++,rasterY);
+    // fldigi streams each Hell column bottom-to-top (Raster::data reverses it).
+    const image=ctx.createImageData(1,height);for(let y=0;y<height;y++){const i=y*4;image.data[i]=image.data[i+1]=image.data[i+2]=columns[offset+height-1-y];image.data[i+3]=255;}ctx.putImageData(image,rasterX++,rasterY);
   }
 }
 function drawPicture(data,show=true){
