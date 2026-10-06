@@ -2,7 +2,7 @@
 
 Fldigi web is a browser-based port of selected [fldigi](https://www.w1hkj.org/) amateur-radio sound-card modems. It decodes recordings or microphone audio, generates WAV files from text, and simulates realtime transmission through the speakers in an interface inspired by desktop fldigi.
 
-The project builds 163 original receive modes from fldigi 4.2.13 plus DTMF, including CW, PSK, RTTY, MFSK, Olivia, MT63, Hellschreiber, and WEFAX. The 159 selectable text/keypad variants also generate audio using the original modem encoders. Audio is processed locally using WebAssembly. WEFAX image generation and radio hardware control are unavailable.
+The project builds 163 original receive modes from fldigi 4.2.13 plus DTMF, including CW, PSK, RTTY, MFSK, Olivia, MT63, Hellschreiber, and WEFAX. The 159 selectable text/keypad variants also generate audio using the original modem encoders. WEFAX, MFSK, THOR, IFKP, and FSQ transmit image files using their native encoders. Audio is processed locally using WebAssembly. Radio hardware control is unavailable.
 
 **Live demo:** [Fldigi Web](https://crashdemons-external.github.io/fldigi-web/)
 
@@ -47,10 +47,30 @@ volume, TX sample-rate correction (ppm), and TX frequency offset (subtracted fro
 the selected frequency). Speaker volume does not alter WAV amplitude. Frequency
 lock retains the current TX audio frequency while receive tuning changes.
 
+**File → Audio → Transmit image** opens an image picker in WEFAX, MFSK, THOR,
+IFKP, and FSQ. Load a PNG, JPEG, WebP, BMP, or GIF, review its prepared preview,
+then choose **Realtime TX** or **Generate WAV**. Both include the original modem
+header, image modulation, and end signals. Realtime image TX stops automatically
+and resumes previously active microphone receive. **T/R** or **Rx** interrupts an
+image and returns to receive; **■** or the Stop audio menu leaves receive off.
+Image TX does not send or alter the text editor. WAV generation downloads the
+complete mono PCM file directly, with no player added to the interface.
+
+In WEFAX, **T/R**, **Tx**, **TX**, and **TX generate** open the image picker.
+WEFAX uses its native 1900 Hz carrier, grayscale, IOC width (1809 or 904 pixels),
+and a choice of 240, 120, 90, or 60 lines/minute. MFSK supports a custom width,
+color/grayscale, and X1/X2/X4 image speed. THOR and IFKP offer the desktop image
+sizes in color or grayscale; FSQ offers its native size/color combinations and
+requires a sender callsign. FSQ addresses images to `allcall` using the original
+3-baud header; receivers should select 3 baud. Images retain their aspect ratio,
+with white padding for fixed formats. Transparent pixels receive a white
+background. Files are limited to 20 MB and 16 million source pixels; prepared
+images and generated audio remain bounded by the 30-minute transmit limit.
+
 Messages are limited to 100,000 UTF-8 bytes and 30 minutes of generated audio.
 Baudot/ASCII modes reject incompatible character sets; Baudot text becomes upper
-case and DTMF accepts keypad characters and pauses. WEFAX image generation,
-TxID/RxID, rig control, and native application integrations are not implemented.
+case and DTMF accepts keypad characters and pauses. TxID/RxID, rig control,
+and native application integrations are not implemented.
 
 Choose the UI workflow with `?workflow=encode`, `?workflow=decode`,
 `?workflow=both`, or `?workflow=full`. The default is `both`; unknown values

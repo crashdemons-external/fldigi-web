@@ -21,6 +21,8 @@
 #include "gfft.h"
 #include "charsetdistiller.h"
 #include "web_dtmf.h"
+#include "web_picture.h"
+#include "web_wefax.h"
 
 WebConfiguration progdefaults;
 WebStatus progStatus;
@@ -35,6 +37,16 @@ std::string tx_text; int tx_cursor=0;
 static bool tx_live=false,tx_finishing=true,tx_done=true,tx_overflow=false;
 static std::vector<float> tx_samples,tx_chunk;
 static size_t tx_read=0;
+static double tx_image_total=0,tx_fax_samples=0;
+class WebMfsk : public mfsk {
+public:
+    using mfsk::mfsk;
+    void prepare_image(int width,int height,bool gray,int spp){
+        TXspp=spp;color=!gray;xmtbytes=width*height*(gray?1:3);rgb=col=row=pixelnbr=0;
+        snprintf(picheader,sizeof(picheader),"\nSending Pic:%dx%d%s%s;",width,height,gray?"":"C",spp==8?"":spp==4?"p4":"p2");
+        startpic=true;
+    }
+};
 void web_tx_audio(const double* samples,int length){
     if(!samples||length<1||tx_done)return;
     // Some upstream modes generate an entire framed message in one call.
@@ -146,13 +158,13 @@ EMSCRIPTEN_KEEPALIVE int web_create(int mode){
     else if(family=="Contestia")decoder=std::make_unique<contestia>(mode);
     else if(family=="RTTY")decoder=std::make_unique<rtty>(mode);
     else if(family=="CW")decoder=std::make_unique<cw>();
-    else if(family=="MFSK")decoder=std::make_unique<mfsk>(mode);
+    else if(family=="MFSK")decoder=std::make_unique<WebMfsk>(mode);
     else if(family=="THOR")decoder=std::make_unique<thor>(mode);
     else if(family=="SCAMP")decoder=std::make_unique<scamp>(mode);
     else if(family=="IFKP")decoder=std::make_unique<ifkp>(mode);
     else if(family=="Hellschreiber")decoder=std::make_unique<feld>(mode);
     else if(family=="NAVTEX")decoder=std::make_unique<navtex>(mode);
-    else if(family=="FSQ")decoder=std::make_unique<fsq>(mode);
+    else if(family=="FSQ"){btn_SELCAL->value(1);decoder=std::make_unique<fsq>(mode);}
     else if(family=="WEFAX")decoder=std::make_unique<wefax>(mode);
     else if(family=="DTMF")decoder=std::make_unique<WebDtmf>();
     status1.clear(); status2.clear();
@@ -206,13 +218,64 @@ EMSCRIPTEN_KEEPALIVE void web_set_option(int key,double value){
 EMSCRIPTEN_KEEPALIVE void web_flush(){if(active_modem)active_modem->rx_flush();rx_charset.flush();received+=rx_charset.data();rx_charset.clear();secondary_charset.flush();secondary+=secondary_charset.data();secondary_charset.clear();}
 // An encoder uses a separate WASM instance from the browser receiver.
 EMSCRIPTEN_KEEPALIVE int web_tx_supported(int mode){return mode>=0&&mode<=WEB_MODE_DTMF&&std::string(web_family(mode))!=""&&std::string(web_family(mode))!="WEFAX";}
-EMSCRIPTEN_KEEPALIVE int web_tx_begin(const char* text,int live,double offset){
-    if(!active_modem||!web_tx_supported(selected_mode)||!text||!std::isfinite(offset))return 0;
+EMSCRIPTEN_KEEPALIVE int web_tx_image_supported(int mode){
+    if(mode<0||mode>=NUM_MODES)return 0;
+    const std::string family=web_family(mode);
+    return family=="WEFAX"||family=="MFSK"||family=="THOR"||family=="IFKP"||family=="FSQ";
+}
+static int begin_tx(const char* text,int live,double offset){
+    if(!active_modem||!text||!std::isfinite(offset))return 0;
     tx_text=text;tx_cursor=0;tx_live=live;tx_finishing=!live;tx_done=false;tx_overflow=false;
     tx_read=0;tx_samples.clear();tx_chunk.clear();modem::tx_sample_count=0;
     fft_ring.fill(0);fft_write=fft_count=0;spectrum.fill(-100);
     progdefaults.TxOffset=clamp(offset,-500.0,500.0);trx_state=STATE_TX;
     active_modem->set_stopflag(false);active_modem->tx_init();return active_modem->get_samplerate();
+}
+EMSCRIPTEN_KEEPALIVE int web_tx_begin(const char* text,int live,double offset){
+    if(!web_tx_supported(selected_mode))return 0;
+    return begin_tx(text,live,offset);
+}
+EMSCRIPTEN_KEEPALIVE int web_tx_image_begin(const unsigned char* pixels,int width,int height,int gray,int format,int spp,int live,double offset,const char* callsign){
+    if(!active_modem||!web_tx_image_supported(selected_mode)||!pixels||width<1||height<1||width>4095||height>4095||size_t(width)*height>8000000)return 0;
+    const std::string family=web_family(selected_mode);
+    static const int widths[]={59,120,240,160,320,640},heights[]={74,150,300,120,240,480};
+    static const int fsq_widths[]={160,320,640,640,240,240,120,120},fsq_heights[]={120,240,480,480,300,300,150,150};
+    static const char colors[]={'T','M','P','S','L','V'},grays[]={'t','m','p','s','l','F'},fsq_types[]={'S','L','F','V','P','p','M','m'};
+    if((family=="THOR"||family=="IFKP")&&(format<0||format>5||width!=widths[format]||height!=heights[format]))return 0;
+    if(family=="FSQ"&&(format<0||format>7||width!=fsq_widths[format]||height!=fsq_heights[format]||bool(gray)!=(format==2||format==5||format==7)||!callsign||!callsign[0]))return 0;
+    if(family=="WEFAX"&&(format<0||format>3||!gray||width!=(selected_mode==MODE_WEFAX_576?1809:904)))return 0;
+    if(family=="MFSK"&&spp!=2&&spp!=4&&spp!=8)return 0;
+    web_tx_pixels.assign(pixels,pixels+size_t(width)*height*3);
+    tx_image_total=width*height*(gray?1:3);
+    tx_fax_samples=family=="WEFAX"?11025*20+int(11025*60.0/all_lpm_values[format].m_value)*(height+21):0;
+    web_image_position=0;web_image_done=false;image_widget.show();image_choice.value(format);
+    if(family=="FSQ"){progdefaults.myCall=callsign;progdefaults.fsq_directed=true;}
+    if(family=="WEFAX"){progdefaults.wefax_lpm_576=progdefaults.wefax_lpm_288=format;}
+    // WEFAX uses the upstream fixed 1900 Hz carrier and absolute APT tones.
+    const int rate=begin_tx("",live,family=="WEFAX"?0:offset);
+    if(!rate)return 0;
+    // Image jobs are finite, even when their PCM is played in realtime.
+    tx_finishing=true;
+    if(family=="MFSK"){
+        dynamic_cast<WebMfsk*>(active_modem)->prepare_image(width,height,gray,spp);
+        std::vector<unsigned char> ordered(width*height*(gray?1:3));
+        for(int y=0;y<height;y++)for(int x=0;x<width;x++){
+            const int p=(y*width+x)*3;
+            if(gray)ordered[y*width+x]=(31*web_tx_pixels[p]+61*web_tx_pixels[p+1]+8*web_tx_pixels[p+2])/100;
+            else for(int c=0;c<3;c++)ordered[(y*3+c)*width+x]=web_tx_pixels[p+c];
+        }
+        web_tx_pixels.swap(ordered);xmtpicbuff=web_tx_pixels.data();
+    }else if(family=="THOR"){
+        thorpicTxWin=&image_widget;dynamic_cast<thor*>(active_modem)->thor_send_image(std::string(" pic%")+(gray?grays[format]:colors[format]),gray);
+    }else if(family=="IFKP"){
+        ifkppicTxWin=&image_widget;dynamic_cast<ifkp*>(active_modem)->ifkp_send_image(std::string(" pic%")+(gray?grays[format]:colors[format]),gray);
+    }else if(family=="FSQ"){
+        fsqpicTxWin=&image_widget;active_modem->fsq_tx_image=true;tx_text=std::string("allcall% ")+fsq_types[format];
+    }else{
+        for(size_t p=0;p<web_tx_pixels.size();p+=3){unsigned char v=(31*web_tx_pixels[p]+61*web_tx_pixels[p+1]+8*web_tx_pixels[p+2])/100;web_tx_pixels[p]=web_tx_pixels[p+1]=web_tx_pixels[p+2]=v;}
+        dynamic_cast<wefax*>(active_modem)->set_tx_parameters(all_lpm_values[format].m_value,web_tx_pixels.data(),false,width,height);
+    }
+    return rate;
 }
 EMSCRIPTEN_KEEPALIVE int web_tx_append(const char* text){if(tx_done||tx_finishing||!text)return 0;tx_text+=text;return 1;}
 EMSCRIPTEN_KEEPALIVE void web_tx_finish(){tx_finishing=true;}
@@ -239,6 +302,10 @@ EMSCRIPTEN_KEEPALIVE const float* web_tx_buffer(){return tx_chunk.data();}
 EMSCRIPTEN_KEEPALIVE int web_tx_done(){return tx_done&&tx_read>=tx_samples.size();}
 EMSCRIPTEN_KEEPALIVE int web_tx_ended(){return tx_done;}
 EMSCRIPTEN_KEEPALIVE int web_tx_cursor(){return tx_cursor;}
+EMSCRIPTEN_KEEPALIVE double web_tx_image_progress(){
+    if(tx_done)return 100;
+    return tx_fax_samples?100.0*modem::tx_sample_count/tx_fax_samples:tx_image_total?100.0*web_image_position/tx_image_total:0;
+}
 EMSCRIPTEN_KEEPALIVE double web_tx_frequency(){return active_modem?active_modem->get_txfreq_woffset():1500;}
 EMSCRIPTEN_KEEPALIVE const char* web_scope(){
     static std::string json;std::ostringstream out;out<<"{\"mode\":"<<scope_mode<<",\"serial\":"<<scope_serial<<",\"phase\":"<<scope_phase<<",\"quality\":"<<scope_quality<<",\"highlight\":"<<(scope_highlight?"true":"false")<<",\"axis\":"<<scope_axis<<",\"videoSerial\":"<<scope_video_serial<<",\"videoDirection\":"<<(scope_video_direction?"true":"false");

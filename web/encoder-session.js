@@ -2,7 +2,7 @@ import {options} from './decoder-session.js';
 
 export function createEncoderSession(core,send){
   const modes=JSON.parse(core.UTF8ToString(core._web_modes()));
-  let job,rate,total=0,limit,bytes=0,live=false,spectrumAt=0;
+  let job,rate,total=0,limit,bytes=0,live=false,spectrumAt=0,image=false;
   function textCall(fn,text,...args){
     const encoded=new TextEncoder().encode(text),pointer=core._malloc(encoded.length+1);
     if(!pointer)throw new Error('Not enough memory to encode this message.');
@@ -11,10 +11,10 @@ export function createEncoderSession(core,send){
   }
   return {handle(data){
     if(data.type==='start'){
-      job=data.job;total=0;spectrumAt=0;live=!!data.live;bytes=new TextEncoder().encode(data.text).length;
+      job=data.job;total=0;spectrumAt=0;live=!!data.live;image=!!data.image;bytes=new TextEncoder().encode(data.text||'').length;
       if(bytes>100000)throw new Error('A message is limited to 100,000 UTF-8 bytes.');
       const settings=data.settings,mode=modes.find(m=>m.id===settings.mode&&m.enabled);
-      if(!mode||!core._web_tx_supported(mode.id))throw new Error('This mode cannot generate text audio.');
+      if(!mode||!(data.image?core._web_tx_image_supported(mode.id):core._web_tx_supported(mode.id)))throw new Error('This mode cannot encode the selected input.');
       // Configure before and after construction: some constructors initialize
       // their transmit codec from the upstream configuration defaults.
       const configure=()=>{for(const [key,index]of Object.entries(options)){
@@ -26,7 +26,16 @@ export function createEncoderSession(core,send){
       configure();core._web_create(mode.id);configure();
       core._web_set_option(44,settings.sideband==='LSB'?0:1);
       core._web_set_frequency(settings.txFrequencyLock?settings.txFrequency:settings.frequency);
-      rate=textCall(core._web_tx_begin,data.text,data.live?1:0,settings.txOffset||0);
+      if(data.image){
+        const image=data.image;
+        if(!(image.pixels instanceof Uint8Array)||image.pixels.length!==image.width*image.height*3)throw new Error('Invalid transmit image pixels.');
+        const pointer=core._malloc(image.pixels.length);
+        if(!pointer)throw new Error('Not enough memory to encode this image.');
+        try{
+          core.HEAPU8.set(image.pixels,pointer);
+          rate=textCall(call=>core._web_tx_image_begin(pointer,image.width,image.height,image.gray?1:0,image.format,image.spp||8,data.live?1:0,settings.txOffset||0,call),image.callsign||'');
+        }finally{core._free(pointer);}
+      }else rate=textCall(core._web_tx_begin,data.text,data.live?1:0,settings.txOffset||0);
       if(!rate)throw new Error('Cannot initialize the selected encoder.');
       limit=rate*1800;
       send({type:'started',job,rate,frequency:core._web_tx_frequency(),live:!!data.live});
@@ -52,7 +61,7 @@ export function createEncoderSession(core,send){
         spectrum=core.HEAPF32.slice(fftPointer/4,fftPointer/4+core._web_spectrum_size());
         transfers.push(spectrum.buffer);
       }
-      send({type:'samples',job,rate,samples,spectrum,total,cursor:core._web_tx_cursor(),ending:!!core._web_tx_ended(),done:!!core._web_tx_done()},transfers);
+      send({type:'samples',job,rate,samples,spectrum,total,progress:image?core._web_tx_image_progress():undefined,cursor:core._web_tx_cursor(),ending:!!core._web_tx_ended(),done:!!core._web_tx_done()},transfers);
     }
   }};
 }

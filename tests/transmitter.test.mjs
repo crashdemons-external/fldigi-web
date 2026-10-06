@@ -7,7 +7,8 @@ import {defaults} from '../web/configuration.js';
 
 const catalog=JSON.parse(fs.readFileSync(new URL('../web/workflow.json',import.meta.url)));
 const workers=[],timers=new Map();let intervalId=0;
-const original={Worker:globalThis.Worker,setInterval:globalThis.setInterval,clearInterval:globalThis.clearInterval};
+const original={Worker:globalThis.Worker,setInterval:globalThis.setInterval,clearInterval:globalThis.clearInterval,createImageBitmap:globalThis.createImageBitmap};
+globalThis.createImageBitmap=async()=>({width:32,height:2,close(){}});
 globalThis.Worker=class{
   constructor(){this.messages=[];workers.push(this);}
   postMessage(data){this.messages.push(data);}
@@ -30,6 +31,8 @@ class Element{
   pause(){this.paused=true;this.dispatch('pause');}
   async play(){this.paused=false;this.dispatch('play');}
   load(){}
+  replaceChildren(...children){this.children=children;}
+  getContext(){return {fillRect(){},drawImage(){},putImageData(){},getImageData:(x,y,w,h)=>({data:new Uint8ClampedArray(w*h*4).fill(255)})};}
 }
 function audioClock(){
   const nodes=[];
@@ -41,7 +44,7 @@ function audioClock(){
 function ui(profile,resumeResult=false){
   const elements=new Map(Object.keys(catalog).map(id=>[id,new Element(id)]));
   const $=id=>elements.get(id),document={getElementById:$,querySelectorAll:()=>[],addEventListener(){}};
-  globalThis.document={body:{classList:{toggle(){}}}};
+  globalThis.document={body:{classList:{toggle(){}}},createElement:tag=>new Element(tag)};
   const workflowUI=createWorkflowFilter(catalog,profile,document),clock=audioClock(),events=[],downloads=[],states=[],warnings=[],spectra=[];
   const settings={...defaults,mode:1};let mode={id:1,name:'BPSK31',label:'BPSK-31',family:'PSK',enabled:true},pauses=0,resumes=0,stops=0;const pauseKinds=[];
   const tx=createTransmitter({$,enabled:profile!=='decode',decodeEnabled:profile!=='encode',workflowUI,getSettings:()=>settings,getMode:()=>mode,
@@ -124,7 +127,7 @@ try{
   const beforeCancel=workers.length;live.tx.toggle();live.tx.cancel();await settle();
   assert.equal(workers.length,beforeCancel,'canceling audio initialization must not create a late encoder');
   live.setMode({id:999,name:'DTMF',family:'DTMF',enabled:true});assert.equal(live.$('frequency').disabled,true);assert.equal(live.$('macro-tr').disabled,false);
-  live.setMode({id:99,name:'WEFAX576',family:'WEFAX',enabled:true});assert.equal(live.$('macro-tr').disabled,true);assert.equal(live.$('menu-generate-audio').disabled,true);
+  live.setMode({id:99,name:'WEFAX576',family:'WEFAX',enabled:true});assert.equal(live.$('macro-tr').disabled,false);assert.equal(live.$('menu-generate-audio').disabled,false);assert.equal(live.$('tx-text').disabled,true);assert.equal(live.$('menu-send-image').disabled,false);
 
   // Held microphone receive resumes only after the modem tail has played.
   const mic=ui('both',true);mic.$('tx-text').value='E';mic.tx.toggle();await settle();
@@ -150,5 +153,31 @@ try{
   clock.currentTime=.22;const due=playback.takeSpectra();assert.equal(due.length,1);assert.ok(Math.abs(due[0].rate-8040)<1e-9,'the display frequency scale follows corrected playback speed');
   playback.stop();assert.ok(clock.nodes.every(node=>node.stopped&&node.disconnected));
   clock.currentTime=10;assert.deepEqual(playback.takeSpectra(),[]);
+  // WEFAX routes both entry points to image setup, without a text warning.
+  const fax=ui('both',true);
+  fax.setMode({id:99,name:'WEFAX576',label:'WEFAX-IOC576',family:'WEFAX',enabled:true});
+  fax.tx.generate();assert.ok(fax.$('tx-image-dialog').open);assert.equal(fax.warnings.length,0);
+  assert.equal(fax.$('tx-image-save').disabled,true,'no image, no transmit');
+  fax.$('tx-image-file').files=[{name:'fixture.png',size:100}];await fax.$('tx-image-file').dispatch('change');
+  assert.equal(fax.$('tx-image-save').disabled,false);
+  await fax.$('tx-image-save').dispatch('click');await settle();const faxRender=workers.at(-1),faxRenderJob=started(faxRender);
+  assert.equal(faxRender.messages.find(m=>m.type==='start').text,'');
+  assert.equal(faxRender.messages.find(m=>m.type==='start').image.width,1809);
+  assert.equal(fax.$('tx-image-dialog').open,false);assert.ok(fax.$('tx-render-dialog').open);
+  assert.equal(fax.$('tx-render-generate').disabled,true,'image rendering cannot accidentally restart text generation');
+  faxRender.emit({type:'samples',job:faxRenderJob,rate:11025,samples:new Float32Array(256),total:256,progress:100,done:true});
+  assert.equal(fax.downloads.length,1);assert.match(fax.downloads[0][0],/-image\.wav$/);assert.equal(fax.clock.nodes.length,0);
+  fax.tx.toggle();assert.ok(fax.$('tx-image-dialog').open);
+  await fax.$('tx-image-live').dispatch('click');await settle();const faxLive=workers.at(-1),faxLiveJob=started(faxLive,true);
+  assert.equal(fax.$('tx-text').disabled,true);
+  faxLive.emit({type:'samples',job:faxLiveJob,rate:11025,samples:new Float32Array(512),total:512,done:true});
+  fax.clock.currentTime=1;for(const fn of [...timers.values()])fn();
+  assert.equal(fax.tx.active,false);assert.equal(fax.resumes,1,'finite image TX resumes the held microphone');
+  fax.tx.toggle();await fax.$('tx-image-live').dispatch('click');await settle();started(workers.at(-1),true);
+  fax.tx.finish();assert.equal(fax.resumes,2,'T/R interrupts an image and returns to receive');assert.equal(fax.stops,0);
+  fax.tx.toggle();await fax.$('tx-image-live').dispatch('click');await settle();started(workers.at(-1),true);
+  fax.tx.cancel();assert.equal(fax.stops,1,'explicit Stop drops microphone access for image TX too');assert.equal(fax.resumes,2);
+  const onlyDecode=ui('decode');onlyDecode.setMode({id:99,name:'WEFAX576',family:'WEFAX',enabled:true});onlyDecode.tx.image();
+  assert.equal(onlyDecode.$('tx-image-dialog').open,undefined);assert.equal(onlyDecode.$('menu-send-image').disabled,true);
   console.log('Passed: workflow gating, empty-input warnings, snapshot render, automatic download, cancellation, live append/finish/abort, load races, RX transition and synchronized TX waterfall timing.');
 }finally{Object.assign(globalThis,original);}

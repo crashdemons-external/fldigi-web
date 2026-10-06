@@ -212,7 +212,7 @@ function preRun() {
 function initRuntime() {
   runtimeInitialized = true;
   // No ATINITS hooks
-  wasmExports["da"]();
+  wasmExports["fa"]();
 }
 
 function postRun() {
@@ -1079,90 +1079,93 @@ Module["UTF8ToString"] = UTF8ToString;
 // End JS library exports
 // end include: postlibrary.js
 // Imports from the Wasm binary.
-var _free, _malloc, _web_create, _web_reset, _web_process, _web_set_frequency, _web_set_option, _web_flush, _web_tx_supported, _web_tx_begin, _web_tx_append, _web_tx_finish, _web_tx_step, _web_tx_buffer, _web_tx_done, _web_tx_ended, _web_tx_cursor, _web_tx_frequency, _web_scope, _web_sample_rate, _web_frequency, _web_metric, _web_bandwidth, _web_waterfall_geometry, _web_modes, _web_take_text, _web_take_secondary, _web_status1, _web_status2, _web_spectrum, _web_spectrum_size, _web_phase, _web_phase_quality, _web_channels, _web_take_raster, _web_raster_size, _web_raster_height, _web_take_image_updates, _web_image_updates_size, _web_image_width, _web_image_height, _web_image_serial, _setThrew, __emscripten_tempret_set, __emscripten_stack_restore, _emscripten_stack_get_current, ___cxa_decrement_exception_refcount, ___cxa_increment_exception_refcount, ___cxa_can_catch, ___cxa_get_exception_ptr, memory, __indirect_function_table, wasmMemory, wasmTable;
+var _free, _malloc, _web_create, _web_reset, _web_process, _web_set_frequency, _web_set_option, _web_flush, _web_tx_supported, _web_tx_image_supported, _web_tx_begin, _web_tx_image_begin, _web_tx_append, _web_tx_finish, _web_tx_step, _web_tx_buffer, _web_tx_done, _web_tx_ended, _web_tx_cursor, _web_tx_image_progress, _web_tx_frequency, _web_scope, _web_sample_rate, _web_frequency, _web_metric, _web_bandwidth, _web_waterfall_geometry, _web_modes, _web_take_text, _web_take_secondary, _web_status1, _web_status2, _web_spectrum, _web_spectrum_size, _web_phase, _web_phase_quality, _web_channels, _web_take_raster, _web_raster_size, _web_raster_height, _web_take_image_updates, _web_image_updates_size, _web_image_width, _web_image_height, _web_image_serial, _setThrew, __emscripten_tempret_set, __emscripten_stack_restore, _emscripten_stack_get_current, ___cxa_decrement_exception_refcount, ___cxa_increment_exception_refcount, ___cxa_can_catch, ___cxa_get_exception_ptr, memory, __indirect_function_table, wasmMemory, wasmTable;
 
 function assignWasmExports(wasmExports) {
-  _free = Module["_free"] = wasmExports["fa"];
-  _malloc = Module["_malloc"] = wasmExports["ga"];
-  _web_create = Module["_web_create"] = wasmExports["ha"];
-  _web_reset = Module["_web_reset"] = wasmExports["ia"];
-  _web_process = Module["_web_process"] = wasmExports["ja"];
-  _web_set_frequency = Module["_web_set_frequency"] = wasmExports["ka"];
-  _web_set_option = Module["_web_set_option"] = wasmExports["la"];
-  _web_flush = Module["_web_flush"] = wasmExports["ma"];
-  _web_tx_supported = Module["_web_tx_supported"] = wasmExports["na"];
-  _web_tx_begin = Module["_web_tx_begin"] = wasmExports["oa"];
-  _web_tx_append = Module["_web_tx_append"] = wasmExports["pa"];
-  _web_tx_finish = Module["_web_tx_finish"] = wasmExports["qa"];
-  _web_tx_step = Module["_web_tx_step"] = wasmExports["ra"];
-  _web_tx_buffer = Module["_web_tx_buffer"] = wasmExports["sa"];
-  _web_tx_done = Module["_web_tx_done"] = wasmExports["ta"];
-  _web_tx_ended = Module["_web_tx_ended"] = wasmExports["ua"];
-  _web_tx_cursor = Module["_web_tx_cursor"] = wasmExports["va"];
-  _web_tx_frequency = Module["_web_tx_frequency"] = wasmExports["wa"];
-  _web_scope = Module["_web_scope"] = wasmExports["xa"];
-  _web_sample_rate = Module["_web_sample_rate"] = wasmExports["ya"];
-  _web_frequency = Module["_web_frequency"] = wasmExports["za"];
-  _web_metric = Module["_web_metric"] = wasmExports["Aa"];
-  _web_bandwidth = Module["_web_bandwidth"] = wasmExports["Ba"];
-  _web_waterfall_geometry = Module["_web_waterfall_geometry"] = wasmExports["Ca"];
-  _web_modes = Module["_web_modes"] = wasmExports["Da"];
-  _web_take_text = Module["_web_take_text"] = wasmExports["Ea"];
-  _web_take_secondary = Module["_web_take_secondary"] = wasmExports["Fa"];
-  _web_status1 = Module["_web_status1"] = wasmExports["Ga"];
-  _web_status2 = Module["_web_status2"] = wasmExports["Ha"];
-  _web_spectrum = Module["_web_spectrum"] = wasmExports["Ia"];
-  _web_spectrum_size = Module["_web_spectrum_size"] = wasmExports["Ja"];
-  _web_phase = Module["_web_phase"] = wasmExports["Ka"];
-  _web_phase_quality = Module["_web_phase_quality"] = wasmExports["La"];
-  _web_channels = Module["_web_channels"] = wasmExports["Ma"];
-  _web_take_raster = Module["_web_take_raster"] = wasmExports["Na"];
-  _web_raster_size = Module["_web_raster_size"] = wasmExports["Oa"];
-  _web_raster_height = Module["_web_raster_height"] = wasmExports["Pa"];
-  _web_take_image_updates = Module["_web_take_image_updates"] = wasmExports["Qa"];
-  _web_image_updates_size = Module["_web_image_updates_size"] = wasmExports["Ra"];
-  _web_image_width = Module["_web_image_width"] = wasmExports["Sa"];
-  _web_image_height = Module["_web_image_height"] = wasmExports["Ta"];
-  _web_image_serial = Module["_web_image_serial"] = wasmExports["Ua"];
-  _setThrew = wasmExports["Va"];
-  __emscripten_tempret_set = wasmExports["Wa"];
-  __emscripten_stack_restore = wasmExports["Xa"];
-  _emscripten_stack_get_current = wasmExports["Ya"];
-  ___cxa_decrement_exception_refcount = wasmExports["Za"];
-  ___cxa_increment_exception_refcount = wasmExports["_a"];
-  ___cxa_can_catch = wasmExports["$a"];
-  ___cxa_get_exception_ptr = wasmExports["ab"];
-  memory = wasmMemory = wasmExports["ca"];
-  __indirect_function_table = wasmTable = wasmExports["ea"];
+  _free = Module["_free"] = wasmExports["ha"];
+  _malloc = Module["_malloc"] = wasmExports["ia"];
+  _web_create = Module["_web_create"] = wasmExports["ja"];
+  _web_reset = Module["_web_reset"] = wasmExports["ka"];
+  _web_process = Module["_web_process"] = wasmExports["la"];
+  _web_set_frequency = Module["_web_set_frequency"] = wasmExports["ma"];
+  _web_set_option = Module["_web_set_option"] = wasmExports["na"];
+  _web_flush = Module["_web_flush"] = wasmExports["oa"];
+  _web_tx_supported = Module["_web_tx_supported"] = wasmExports["pa"];
+  _web_tx_image_supported = Module["_web_tx_image_supported"] = wasmExports["qa"];
+  _web_tx_begin = Module["_web_tx_begin"] = wasmExports["ra"];
+  _web_tx_image_begin = Module["_web_tx_image_begin"] = wasmExports["sa"];
+  _web_tx_append = Module["_web_tx_append"] = wasmExports["ta"];
+  _web_tx_finish = Module["_web_tx_finish"] = wasmExports["ua"];
+  _web_tx_step = Module["_web_tx_step"] = wasmExports["va"];
+  _web_tx_buffer = Module["_web_tx_buffer"] = wasmExports["wa"];
+  _web_tx_done = Module["_web_tx_done"] = wasmExports["xa"];
+  _web_tx_ended = Module["_web_tx_ended"] = wasmExports["ya"];
+  _web_tx_cursor = Module["_web_tx_cursor"] = wasmExports["za"];
+  _web_tx_image_progress = Module["_web_tx_image_progress"] = wasmExports["Aa"];
+  _web_tx_frequency = Module["_web_tx_frequency"] = wasmExports["Ba"];
+  _web_scope = Module["_web_scope"] = wasmExports["Ca"];
+  _web_sample_rate = Module["_web_sample_rate"] = wasmExports["Da"];
+  _web_frequency = Module["_web_frequency"] = wasmExports["Ea"];
+  _web_metric = Module["_web_metric"] = wasmExports["Fa"];
+  _web_bandwidth = Module["_web_bandwidth"] = wasmExports["Ga"];
+  _web_waterfall_geometry = Module["_web_waterfall_geometry"] = wasmExports["Ha"];
+  _web_modes = Module["_web_modes"] = wasmExports["Ia"];
+  _web_take_text = Module["_web_take_text"] = wasmExports["Ja"];
+  _web_take_secondary = Module["_web_take_secondary"] = wasmExports["Ka"];
+  _web_status1 = Module["_web_status1"] = wasmExports["La"];
+  _web_status2 = Module["_web_status2"] = wasmExports["Ma"];
+  _web_spectrum = Module["_web_spectrum"] = wasmExports["Na"];
+  _web_spectrum_size = Module["_web_spectrum_size"] = wasmExports["Oa"];
+  _web_phase = Module["_web_phase"] = wasmExports["Pa"];
+  _web_phase_quality = Module["_web_phase_quality"] = wasmExports["Qa"];
+  _web_channels = Module["_web_channels"] = wasmExports["Ra"];
+  _web_take_raster = Module["_web_take_raster"] = wasmExports["Sa"];
+  _web_raster_size = Module["_web_raster_size"] = wasmExports["Ta"];
+  _web_raster_height = Module["_web_raster_height"] = wasmExports["Ua"];
+  _web_take_image_updates = Module["_web_take_image_updates"] = wasmExports["Va"];
+  _web_image_updates_size = Module["_web_image_updates_size"] = wasmExports["Wa"];
+  _web_image_width = Module["_web_image_width"] = wasmExports["Xa"];
+  _web_image_height = Module["_web_image_height"] = wasmExports["Ya"];
+  _web_image_serial = Module["_web_image_serial"] = wasmExports["Za"];
+  _setThrew = wasmExports["_a"];
+  __emscripten_tempret_set = wasmExports["$a"];
+  __emscripten_stack_restore = wasmExports["ab"];
+  _emscripten_stack_get_current = wasmExports["bb"];
+  ___cxa_decrement_exception_refcount = wasmExports["cb"];
+  ___cxa_increment_exception_refcount = wasmExports["db"];
+  ___cxa_can_catch = wasmExports["eb"];
+  ___cxa_get_exception_ptr = wasmExports["fb"];
+  memory = wasmMemory = wasmExports["ea"];
+  __indirect_function_table = wasmTable = wasmExports["ga"];
 }
 
 var wasmImports = {
   /** @export */ m: ___assert_fail,
-  /** @export */ o: ___cxa_begin_catch,
+  /** @export */ n: ___cxa_begin_catch,
   /** @export */ q: ___cxa_end_catch,
   /** @export */ a: ___cxa_find_matching_catch_2,
-  /** @export */ h: ___cxa_find_matching_catch_3,
-  /** @export */ T: ___cxa_rethrow,
+  /** @export */ i: ___cxa_find_matching_catch_3,
+  /** @export */ G: ___cxa_rethrow,
   /** @export */ s: ___cxa_throw,
-  /** @export */ S: ___cxa_uncaught_exceptions,
-  /** @export */ d: ___resumeException,
+  /** @export */ T: ___cxa_uncaught_exceptions,
+  /** @export */ e: ___resumeException,
   /** @export */ F: ___syscall_fcntl64,
-  /** @export */ P: ___syscall_ioctl,
-  /** @export */ Q: ___syscall_openat,
+  /** @export */ Q: ___syscall_ioctl,
+  /** @export */ R: ___syscall_openat,
   /** @export */ _: __abort_js,
   /** @export */ W: __gmtime_js,
   /** @export */ X: __localtime_js,
   /** @export */ Y: __tzset_js,
   /** @export */ Z: _clock_time_get,
-  /** @export */ I: _emscripten_date_now,
+  /** @export */ J: _emscripten_date_now,
   /** @export */ U: _emscripten_resize_heap,
-  /** @export */ M: _environ_get,
-  /** @export */ N: _environ_sizes_get,
-  /** @export */ $: _exit,
-  /** @export */ H: _fd_close,
-  /** @export */ O: _fd_read,
+  /** @export */ N: _environ_get,
+  /** @export */ O: _environ_sizes_get,
+  /** @export */ ba: _exit,
+  /** @export */ I: _fd_close,
+  /** @export */ P: _fd_read,
   /** @export */ V: _fd_seek,
-  /** @export */ G: _fd_write,
+  /** @export */ H: _fd_write,
   /** @export */ C: invoke_diii,
   /** @export */ D: invoke_fiii,
   /** @export */ l: invoke_i,
@@ -1170,29 +1173,31 @@ var wasmImports = {
   /** @export */ p: invoke_iid,
   /** @export */ z: invoke_iiddi,
   /** @export */ y: invoke_iidi,
-  /** @export */ K: invoke_iif,
+  /** @export */ L: invoke_iif,
   /** @export */ c: invoke_iii,
-  /** @export */ e: invoke_iiii,
-  /** @export */ g: invoke_iiiii,
-  /** @export */ R: invoke_iiiiid,
-  /** @export */ J: invoke_iiiiii,
+  /** @export */ aa: invoke_iiid,
+  /** @export */ d: invoke_iiii,
+  /** @export */ h: invoke_iiiii,
+  /** @export */ S: invoke_iiiiid,
+  /** @export */ K: invoke_iiiiii,
   /** @export */ r: invoke_iiiiiii,
   /** @export */ E: invoke_iiiiiiii,
   /** @export */ x: invoke_iiiiiiiiiiii,
-  /** @export */ k: invoke_v,
-  /** @export */ j: invoke_vi,
-  /** @export */ ba: invoke_vid,
-  /** @export */ L: invoke_vidd,
+  /** @export */ j: invoke_v,
+  /** @export */ k: invoke_vi,
+  /** @export */ da: invoke_vid,
+  /** @export */ M: invoke_vidd,
   /** @export */ f: invoke_vii,
-  /** @export */ i: invoke_viii,
+  /** @export */ g: invoke_viii,
   /** @export */ A: invoke_viiid,
   /** @export */ B: invoke_viiidd,
-  /** @export */ v: invoke_viiii,
+  /** @export */ u: invoke_viiii,
   /** @export */ t: invoke_viiiii,
-  /** @export */ n: invoke_viiiiiii,
-  /** @export */ u: invoke_viiiiiiiiii,
+  /** @export */ $: invoke_viiiiii,
+  /** @export */ o: invoke_viiiiiii,
+  /** @export */ v: invoke_viiiiiiiiii,
   /** @export */ w: invoke_viiiiiiiiiiiiiii,
-  /** @export */ aa: _llvm_eh_typeid_for
+  /** @export */ ca: _llvm_eh_typeid_for
 };
 
 function invoke_vi(index, a1) {
@@ -1419,6 +1424,28 @@ function invoke_iiiiii(index, a1, a2, a3, a4, a5) {
   var sp = stackSave();
   try {
     return getWasmTableEntry(index)(a1, a2, a3, a4, a5);
+  } catch (e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiid(index, a1, a2, a3) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1, a2, a3);
+  } catch (e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiiiii(index, a1, a2, a3, a4, a5, a6) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1, a2, a3, a4, a5, a6);
   } catch (e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;

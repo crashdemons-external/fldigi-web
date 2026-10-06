@@ -359,6 +359,7 @@ async function showBuildInfo(){
 }
 const actions={
   'generate-audio':generateAudio,
+  'send-image':()=>transmitter?.image(),
   'show-picture':()=>pictureData?$('picture-dialog').showModal():status('No image has been received yet'),
   'open-audio':()=>$('audio-upload').click(),live:startLive,stop:stopAudio,
   'export-text':()=>download('fldigi-received.txt',$('rx-text').value,'text/plain;charset=utf-8'),clear:()=>{$('rx-text').value='';$('secondary-text').textContent='';},

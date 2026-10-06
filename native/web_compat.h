@@ -51,8 +51,9 @@ class SoundBase {};
 class PLOT_XY {};
 #include "morse.h"
 struct Widget {
-    double value() const { return 0; } void value(double) {} bool visible() const { return false; }
-    void show() {} void hide() {} void redraw() {} void activate() {} void deactivate() {}
+    double number=0; bool shown=false;
+    double value() const { return number; } void value(double v) { number=v; } bool visible() const { return shown; }
+    void show() { shown=true; } void hide() { shown=false; } void redraw() {} void activate() {} void deactivate() {}
 };
 extern Widget *dlgViewer, *test_signal_window, *btn_imd_on, *xmtimd;
 inline Widget hell_widget,*sldrHellBW=&hell_widget,*btnOffsetOn=&hell_widget,*ctrl_freq_offset=&hell_widget,*btn_SELCAL=&hell_widget;

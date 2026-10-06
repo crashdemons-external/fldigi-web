@@ -23,6 +23,94 @@ SOURCES = [
 HEADERS = "globals.h complex.h misc.h ascii.h filters.h fftfilt.h gfft.h viterbi.h psk.h pskcoeff.h pskvaricode.h pskeval.h viewpsk.h mfskvaricode.h interleave.h dominoex.h dominovar.h throb.h mbuffer.h dsp.h mt63.h mt63base.h olivia.h contestia.h rtty.h cw.h morse.h mfsk.h thor.h thorvaricode.h scamp.h scamp_protocol.h ifkp.h feld.h fontdef.h re.h navtex.h fsq.h crc8.h wefax.h strutil.h".split()
 
 
+def stream_image(text, family):
+    """Yield image modulation in small batches, retaining upstream DSP code.
+
+    Desktop send_image runs a whole image on its transmit thread. A worker
+    needs resumable pixel iteration so realtime TX has bounded lookahead.
+    Keep the original preamble and pixel modulation statements verbatim.
+    """
+    start = text.index(f'void {family}::send_image()')
+    end_marker = {'thor': 'void thor::thor_send_image', 'ifkp': 'std::string img_str;', 'fsq': 'void fsq::send_string'}[family]
+    end = text.index(end_marker, start)
+    original = text[start:end]
+    condition = {'thor': 'if (send_gray)', 'ifkp': 'if (send_color == false)', 'fsq': 'if (color == false)'}[family]
+    split = original.index(condition)
+    preamble_start = original.index('\tREQ(')
+    head = original[:preamble_start]
+    preamble = original[preamble_start:split]
+    pixel_start = original.rindex('tx_pixelnbr = col + row * W;')
+    modulation_end = re.search(r'(?:ModulateXmtr|transmit)\(outbuf, (?:IMAGEspp|10)\);', original[pixel_start:]).end() + pixel_start
+    pixel = original[pixel_start:modulation_end]
+    pixel = pixel.replace(f'tx_pixel = {family}pic_TxGetPixel(tx_pixelnbr, color);', f'''tx_pixel = gray ?
+            0.3 * {family}pic_TxGetPixel(tx_pixelnbr, 0) +
+            0.6 * {family}pic_TxGetPixel(tx_pixelnbr, 1) +
+            0.1 * {family}pic_TxGetPixel(tx_pixelnbr, 2) :
+            {family}pic_TxGetPixel(tx_pixelnbr, color);''')
+    gray = {'thor': 'send_gray', 'ifkp': '!send_color', 'fsq': '!color'}[family]
+    channel = '2 - (web_image_position / W) % 3' if family == 'fsq' else '(web_image_position / W) % 3'
+    replacement = head + '\nif (web_image_position == 0) {\n' + preamble + '\n}\n' + f'''
+    const bool gray = {gray};
+    const int channels = gray ? 1 : 3;
+    const int total = W * H * channels;
+    const int limit = std::min(total, web_image_position + 128);
+    for (; web_image_position < limit; ++web_image_position) {{
+        int row = web_image_position / (W * channels);
+        int col = web_image_position % W;
+        int color = gray ? 0 : {channel};
+        {pixel}
+    }}
+    web_image_done = web_image_position == total;
+    if (web_image_done) start_deadman();
+}}
+
+'''
+    # Desktop text tones already use the TX carrier. Keep image FM on that
+    # same carrier when the browser's frequency lock / offset is configured.
+    replacement = re.sub(r'\bfrequency\b', 'get_txfreq_woffset()', replacement)
+    text = text[:start] + replacement + text[end:]
+    if family == 'thor':
+        text = text.replace('case TX_STATE_IMAGE:\n', 'case TX_STATE_IMAGE:\n\t\tif (web_image_position == 0) {\n')
+        text = text.replace('\t\tsend_image();', '\t\t}\n\t\tsend_image();\n\t\tif (!web_image_done) return 0;', 1)
+    elif family == 'ifkp':
+        text = text.replace('\t\t\tsend_image();', '\t\t\tsend_image();\n\t\t\tif (!web_image_done) return 0;', 1)
+    else:
+        text = text.replace('int fsq::tx_process()\n{', '''int fsq::tx_process()
+{
+    if (fsq_tx_image && web_image_position > 0) {
+        send_image();
+        if (!web_image_done) return 0;
+        flush_buffer();
+        fsq_tx_image = false;
+        stopflag = false;
+        return -1;
+    }''')
+        text = text.replace('\t\tsend_eot = false;', '\t\tsend_eot = false;\n\t\tif (fsq_tx_image && !web_image_done) return 0;', 1)
+    return text
+
+
+def stream_fax(text):
+    # Retain the native APT/phasing/image/stop state machine and FM modulator;
+    # Persist its sample cursor and yield after 32 native 256-sample buffers.
+    text = text.replace('fax_state m_tx_state;', 'int m_web_tx_sample_idx = 0;\n\tfax_state m_tx_state;')
+    text = text.replace('void init_tx(int the_smpl_rate);', 'bool web_tx_idle() const { return m_tx_state == IDLE; }\n\tvoid init_tx(int the_smpl_rate);')
+    text = text.replace('m_tx_state = TXAPTSTART;', 'm_tx_state = TXAPTSTART;\n\tm_web_tx_sample_idx = 0;')
+    start = text.index('bool fax_implementation::trx_do_next(void)')
+    end = text.index('void fax_implementation::tx_params_set', start)
+    body = text[start:end]
+    body = body.replace('int curr_sample_idx = 0 , nb_samples_to_send  = 0 ;', 'int &curr_sample_idx = m_web_tx_sample_idx;\n\tint nb_samples_to_send = 0;')
+    body = body.replace('for (int num_bytes_to_write = 0; ; ++num_bytes_to_write)', 'int num_bytes_to_write = 0;\n\tfor (; ; ++num_bytes_to_write)')
+    body = body.replace('bool end_of_loop = false ;', 'int web_blocks = 0;\n\tbool end_of_loop = false ;')
+    body = body.replace('num_bytes_to_write = 0 ;', 'num_bytes_to_write = 0;\n\t\t\tif (++web_blocks == 32) { delete [] buf; return true; }')
+    body = body.replace('m_tx_state = TXBLACK;\n\t\t\t\tcurr_sample_idx = 0;\n\t\t\t\tcontinue;', 'm_tx_state = TXBLACK;\n\t\t\t\tcurr_sample_idx = 0;\n\t\t\t\t--num_bytes_to_write;\n\t\t\t\tcontinue;')
+    body = body.replace('m_tx_state = IDLE;\n\t\t\t\tend_of_loop = true ;\n\t\t\t\tcontinue ;', 'm_tx_state = IDLE;\n\t\t\t\tend_of_loop = true;\n\t\t\t\tbreak;')
+    # The final incomplete block belongs to the tail; desktop discards it.
+    body = body.replace('} // loop\n\tdelete [] buf;', '} // loop\n\tif (num_bytes_to_write > 0) modulate(buf, num_bytes_to_write);\n\tdelete [] buf;')
+    text = text[:start] + body + text[end:]
+    text = text.replace('bool tx_was_completed = m_impl->trx_do_next();', 'bool tx_was_completed = m_impl->trx_do_next();\n\tif (tx_was_completed && !m_impl->web_tx_idle()) return 0;')
+    return text
+
+
 def elements(text):
     text = text.replace("\\\n", " ")
     for match in re.finditer(r"ELEM_\(", text):
@@ -104,7 +192,14 @@ def main():
             text += '\nvoid cw::send_CW(int) {}\n'
         if name in ['mfsk/mfsk.cxx', 'thor/thor.cxx', 'ifkp/ifkp.cxx']:
             text = re.sub(r'#include "(?:mfsk|thor|ifkp)-pic.cxx"', '#include "web_picture.h"', text)
+        if name == 'mfsk/mfsk.cxx':
+            text = text.replace('int i = 0;\n\t\t\tint blocklen = 128;', 'int &i = web_image_position;\n\t\t\tint blocklen = 128;')
+            text = text.replace('while (i < xmtbytes)', 'if (i < xmtbytes)')
+            text = text.replace('\t\t\t\ti += blocklen;\n\t\t\t}', '\t\t\t\ti = std::min(xmtbytes, i + blocklen);\n\t\t\t}\n\t\t\tif (i < xmtbytes) return 0;\n\t\t\tweb_image_done = true;')
+        if name in ['thor/thor.cxx', 'ifkp/ifkp.cxx', 'fsq/fsq.cxx']:
+            text = stream_image(text, Path(name).stem)
         if name == 'ifkp/ifkp.cxx':
+            text = text.replace('frequency = (basetone + tone * IFKP_SPACING) * samplerate / symlen;', 'frequency = (basetone + tone * IFKP_SPACING) * samplerate / symlen - progdefaults.TxOffset;')
             text = text.replace('#include "ifkp_varicode.cxx"', (UPSTREAM / 'ifkp/ifkp_varicode.cxx').read_text())
             text = text[:text.index('static picture *def_ifkp_avatar')] + '\nvoid ifkp::m_ifkp_send_avatar() {}\n' + text[text.index('int ifkp::tx_process'):]
             text += '\nstd::string ifkp::imageheader;\n'
@@ -117,10 +212,12 @@ def main():
             end=text.index('} // display',start)+len('} // display')
             text=text[:start]+'void display(const std::string &alt_string){std::string::operator=(alt_string);cleanup();}\n'+text[end:]
         if name == 'fsq/fsq.cxx':
+            text = text.replace('freq = (tx_basetone + tone * spacing) * samplerate / FSQ_SYMLEN;', 'freq = (tx_basetone + tone * spacing) * samplerate / FSQ_SYMLEN - progdefaults.TxOffset;')
             text=text.replace('#include "fsq-pic.cxx"','#include "web_picture.h"')
             text=text.replace('#include "fsq_varicode.cxx"',(UPSTREAM/'fsq/fsq_varicode.cxx').read_text())
             text=text[:text.index('void  clear_xmt_arrays()\n{')]+'\nvoid fsq::reply(std::string){}\nvoid fsq::delayed_reply(std::string,int){}\nvoid fsq::start_aging(){}\nvoid fsq::stop_aging(){}\nvoid fsq::start_sounder(int){}\nvoid SOUNDER_close(){}\n'
         if name == 'wefax/wefax.cxx':
+            text = stream_fax(text)
             text=text.replace('#include "wefax-pic.h"','#include "web_wefax.h"')
             start=text.index('void wefax::qso_rec_save(void)');end=text.index('void wefax::set_freq(double freq)',start)
             text=text[:start]+'void wefax::qso_rec_save(void){}\n'+text[end:]

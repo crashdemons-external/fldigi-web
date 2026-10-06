@@ -503,5 +503,22 @@
   "tx-render-status": ["encode"],
   "tx-render-generate": ["encode"],
   "tx-render-close": ["encode"],
-  "config-txVolume": ["encode"]
+  "config-txVolume": ["encode"],
+  "menu-send-image": ["encode"],
+  "tx-image-dialog": ["encode"],
+  "tx-image-close-title": ["encode"],
+  "tx-image-mode": ["encode"],
+  "tx-image-file": ["encode"],
+  "tx-image-format": ["encode"],
+  "tx-image-width-row": ["encode"],
+  "tx-image-width": ["encode"],
+  "tx-image-speed-row": ["encode"],
+  "tx-image-speed": ["encode"],
+  "tx-image-callsign-row": ["encode"],
+  "tx-image-callsign": ["encode"],
+  "tx-image-preview": ["encode"],
+  "tx-image-info": ["encode"],
+  "tx-image-close": ["encode"],
+  "tx-image-live": ["encode"],
+  "tx-image-save": ["encode"]
 }
