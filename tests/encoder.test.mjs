@@ -54,6 +54,34 @@ const keypad='123A456B789C*0#D';
 const tones=render('DTMF',keypad);receiver._web_set_option(2,0);
 assert.ok(decode('DTMF',tones).includes(keypad),'original DTMF generator must round-trip every key');
 
+// Configuration must control the actual PCM timing, including repeated keys
+// and explicit pauses, across worker buffer boundaries.
+assert.equal(tones.samples.length,keypad.length*800,'default DTMF remains 50 ms tone + 50 ms gap');
+const timed=render('DTMF','11',{dtmfToneMs:120,dtmfGapMs:80},137);
+assert.equal(timed.samples.length,3200);
+for(const start of [0,1600]){
+  assert.ok(timed.samples.subarray(start,start+960).some(sample=>Math.abs(sample)>.05));
+  assert.ok(timed.samples.subarray(start+960,start+1600).every(sample=>sample===0),'configured inter-digit gap must be silent');
+}
+assert.equal(decode('DTMF',timed).replace(/\s|<DTMF>/g,''),'11','configured gaps allow repeated digits');
+const paused=render('DTMF','1 ,-2',{dtmfToneMs:90,dtmfGapMs:70});
+assert.equal(paused.samples.length,6400,'each pause lasts one tone duration plus one gap');
+assert.ok(paused.samples.subarray(720,5120).every(sample=>sample===0));
+for(const settings of [{dtmfToneMs:40,dtmfGapMs:30},{dtmfToneMs:2000,dtmfGapMs:2000}]){
+  const generated=render('DTMF','1',settings,512);
+  assert.equal(generated.samples.length,8*(settings.dtmfToneMs+settings.dtmfGapMs),'timing bounds fit native buffers');
+}
+assert.equal(render('DTMF','1').samples.length,800,'a new job restores default timing');
+
+for(const fsqLowercase of [false,true]){
+  const generated=render('FSQ','TEST MESSAGE\n',{callsign:'W1TEST',fsqLowercase,fsqBaud:3});
+  receiver._web_set_option(43,3);
+  const decoded=decode('FSQ',generated);
+  assert.ok(decoded.includes(fsqLowercase?'w1test:':'W1TEST:'),`FSQ sender formatting reaches the native encoder: ${JSON.stringify(decoded)}`);
+}
+const noSender=render('FSQ','TEST MESSAGE\n',{fsqBaud:3});
+assert.ok(!decode('FSQ',noSender).includes('W1TEST'),'a new job must clear the previous callsign');
+
 // The two instances must leave an ongoing receiver untouched.
 receiver._web_create(modes.find(m=>m.name==='RTTY').id);receiver._web_set_frequency(1700);
 render('BPSK31');assert.equal(receiver._web_frequency(),1700);
@@ -99,6 +127,13 @@ const wav=await wavBlob([pcm],6,8000).arrayBuffer(),view=new DataView(wav);
 assert.equal(view.getUint32(24,true),8000);assert.equal(view.getUint32(40,true),12);assert.equal(wav.byteLength,56);
 assert.equal(view.getInt16(44,true),-32768);assert.equal(view.getInt16(50,true),32767);assert.equal(view.getInt16(54,true),0);
 const mode=name=>modes.find(m=>m.name===name);
+for(const name of ['IFKP','FSQ']){
+  const key=name==='IFKP'?'ifkpLowercase':'fsqLowercase';
+  assert.equal(prepareTransmitText('DE <MYCALL>',mode(name),{...defaults,callsign:'W1TEST',[key]:true}),'DE w1test');
+  assert.equal(prepareTransmitText('<MYCALL> <MYCALL>',mode(name),{...defaults,callsign:'W1TEST',[key]:false}),'W1TEST W1TEST');
+  assert.throws(()=>prepareTransmitText('<MYCALL>',mode(name),defaults),/Set your callsign/);
+}
+assert.equal(prepareTransmitText('<MYCALL>',mode('BPSK31'),defaults),'<MYCALL>','callsign expansion is limited to IFKP/FSQ');
 assert.equal(prepareTransmitText('abc\r\n123',mode('RTTY'),defaults),'ABC\n123');
 assert.throws(()=>prepareTransmitText('😀',mode('RTTY'),defaults),/ASCII/);
 assert.throws(()=>prepareTransmitText('E',mode('DTMF'),defaults),/DTMF accepts/);

@@ -91,6 +91,8 @@ assert.equal(supportsImageTransmit(mode('BPSK31')),false);
 assert.throws(()=>imagePlan(mode('IFKP'),200,100,{format:'bad'}),/supported image format/);
 assert.throws(()=>imagePlan(mode('MFSK16'),100,100,{format:'color',width:4095}),/30-minute/);
 assert.throws(()=>imagePlan(mode('FSQ'),100,100,{format:'0',callsign:''}),/callsign/);
+assert.equal(imagePlan(mode('FSQ'),100,100,{format:'0',callsign:'W1ABC',lowercase:true}).callsign,'w1abc');
+assert.equal(imagePlan(mode('FSQ'),100,100,{format:'0',callsign:'w1abc',lowercase:false}).callsign,'W1ABC');
 for(const [name,format]of [['MFSK32','color'],['THOR16','0-color'],['IFKP','0-color']]){
   const shifted=render(name,image(name,format),8192,false,{txOffset:100});
   assert.equal(shifted.frequency,1400);assert.ok(decode(name,shifted,1400).updates>0,`${name}: image header and FM use the same offset carrier`);

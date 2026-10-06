@@ -143,6 +143,7 @@ def main():
     dtmf = dtmf.replace('int framesize;', 'int framesize;\n\tsize_t dptr = 0;')
     dtmf = dtmf.replace('~cDTMF() {};', '~cDTMF() { for (auto filter : filt) delete filter; };')
     dtmf = dtmf.replace('void receive(const float* buf, size_t len);', 'void receive(const float* buf, size_t len);\n\tvoid flush();')
+    dtmf = dtmf.replace('void send();', 'void send(int tone_ms = 50, int gap_ms = 50);')
     (inc / 'dtmf.h').write_text(dtmf, encoding='utf-8')
     shutil.copyfile(UPSTREAM / 'include/charsetdistiller.h', inc / 'charsetdistiller.h')
     shutil.copyfile(UPSTREAM / 'libtiniconv/tiniconv.h', inc / 'tiniconv.h')
@@ -183,6 +184,11 @@ def main():
 \t\tdptr = 0;
 \t\tint x = decode();''' + text[end:]
             text = text.replace('REQ(showDTMF, dtmfchars);', 'showDTMF(dtmfchars);')
+            # Expose tone and gap timing without changing upstream synthesis.
+            # Bounds fit its 16384-sample buffer and the 4 ms shaped edges.
+            text = text.replace('void cDTMF::send()', 'void cDTMF::send(int tone_ms, int gap_ms)')
+            text = text.replace('duration = 50;', 'duration = clamp(tone_ms, 40, 2000);\n\tgap_ms = clamp(gap_ms, 30, 2000);')
+            text = text.replace('\t\tsilence(duration);\n\t}', '\t\tsilence(gap_ms);\n\t}')
             text = text.replace('if (maxpower <', 'active_modem->display_metric(clamp(maxpower / 10.0, 0.0, 100.0));\n\tif (maxpower <')
             text += '\nvoid cDTMF::flush() { if (!dtmfchars.empty()) { showDTMF(dtmfchars); dtmfchars.clear(); } }\n'
             (GENERATED / 'dtmf.cxx').write_text(text, encoding='utf-8')

@@ -9,7 +9,7 @@ export function imageFormats(mode){
   if(mode.family==='FSQ')return fsqSizes.map(([width,height,gray],format)=>({value:String(format),label:`${width} × ${height} · ${gray?'Grayscale':'Color'}`,width,height,gray,format}));
   return sizes.flatMap(([width,height],format)=>[false,true].map(gray=>({value:`${format}-${gray?'gray':'color'}`,label:`${width} × ${height} · ${gray?'Grayscale':'Color'}`,width,height,gray,format})));
 }
-export function imagePlan(mode,sourceWidth,sourceHeight,{format,width=320,spp=8,callsign=''}={}){
+export function imagePlan(mode,sourceWidth,sourceHeight,{format,width=320,spp=8,callsign='',lowercase=true}={}){
   if(!supportsImageTransmit(mode))throw new Error('This mode does not transmit image files.');
   if(!Number.isInteger(sourceWidth)||!Number.isInteger(sourceHeight)||sourceWidth<1||sourceHeight<1||sourceWidth*sourceHeight>16000000)throw new Error('Choose an image with at most 16 million pixels.');
   const choices=imageFormats(mode),choice=choices.find(item=>item.value===String(format));
@@ -22,8 +22,8 @@ export function imagePlan(mode,sourceWidth,sourceHeight,{format,width=320,spp=8,
   if(!Number.isInteger(targetWidth)||targetWidth<1||targetWidth>4095||targetHeight>4095)throw new Error('The prepared image must be at most 4095 pixels wide and high. Reduce its width or crop the source image.');
   spp=mode.family==='MFSK'?Number(spp):mode.family==='IFKP'?8:10;
   if(mode.family==='MFSK'&&![2,4,8].includes(spp))throw new Error('Choose a supported image speed.');
-  callsign=callsign.trim().toLowerCase();
-  if(mode.family==='FSQ'&&!/^[a-z0-9/]{3,20}$/.test(callsign))throw new Error('Enter your FSQ callsign (3–20 letters, numbers, or /).');
+  callsign=lowercase?callsign.trim().toLowerCase():callsign.trim().toUpperCase();
+  if(mode.family==='FSQ'&&!/^[a-z0-9/]{3,20}$/i.test(callsign))throw new Error('Enter your FSQ callsign (3–20 letters, numbers, or /).');
   const rate=mode.family==='IFKP'?16000:mode.family==='FSQ'?12000:8000;
   const pixelSeconds=targetWidth*targetHeight*(choice.gray?1:3)*spp/rate;
   // Allow for the text/FEC header and native modem tail; the worker also
@@ -41,7 +41,7 @@ export function createImageTransmitDialog({$,enabled,workflowUI,getMode,getSetti
     plan=pixels=undefined;ready(false);
     if(!bitmap){$('tx-image-info').textContent='Choose an image to preview its transmit format.';return;}
     try{
-      const mode=getMode();plan=imagePlan(mode,bitmap.width,bitmap.height,{format:$('tx-image-format').value,width:$('tx-image-width').value,spp:$('tx-image-speed').value,callsign:$('tx-image-callsign').value});
+      const mode=getMode();plan=imagePlan(mode,bitmap.width,bitmap.height,{format:$('tx-image-format').value,width:$('tx-image-width').value,spp:$('tx-image-speed').value,callsign:$('tx-image-callsign').value,lowercase:getSettings().fsqLowercase});
       canvas.width=plan.width;canvas.height=plan.height;
       const ctx=canvas.getContext('2d',{willReadFrequently:true});
       ctx.fillStyle='#fff';ctx.fillRect(0,0,plan.width,plan.height);
@@ -78,6 +78,7 @@ export function createImageTransmitDialog({$,enabled,workflowUI,getMode,getSetti
     $('tx-image-format').replaceChildren(...choices.map(choice=>{const option=document.createElement('option');option.value=choice.value;option.textContent=choice.label;return option;}));
     $('tx-image-format').value=mode.family==='WEFAX'?String(settings.wefaxLpm):mode.family==='MFSK'?'color':mode.family==='FSQ'?'1':'4-color';
     $('tx-image-width-row').hidden=mode.family!=='MFSK';$('tx-image-speed-row').hidden=mode.family!=='MFSK';$('tx-image-callsign-row').hidden=mode.family!=='FSQ';
+    if(mode.family==='FSQ'&&!$('tx-image-callsign').value)$('tx-image-callsign').value=settings.callsign;
     $('tx-image-live').autofocus=intent==='live';$('tx-image-save').autofocus=intent==='render';
     prepare();dialog.showModal();
   }

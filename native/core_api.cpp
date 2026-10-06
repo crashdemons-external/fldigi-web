@@ -174,6 +174,7 @@ EMSCRIPTEN_KEEPALIVE int web_create(int mode){
 EMSCRIPTEN_KEEPALIVE void web_reset(){if(active_modem){double tuned=modem::frequency;web_create(selected_mode);active_modem->set_freq(tuned);}received.clear();secondary.clear();}
 EMSCRIPTEN_KEEPALIVE void web_process(const float* data,int length){if(!active_modem||length<1||length>65536)return;std::vector<double> pcm(length);for(int i=0;i<length;i++)pcm[i]=std::isfinite(data[i])?data[i]:0;update_spectrum(pcm.data(),length);active_modem->rx_process(pcm.data(),length);}
 EMSCRIPTEN_KEEPALIVE void web_set_frequency(double f){if(active_modem)active_modem->set_freq(f);else wf->carrier=f;}
+EMSCRIPTEN_KEEPALIVE void web_set_callsign(const char* callsign){progdefaults.myCall=callsign?std::string(callsign).substr(0,32):"";}
 EMSCRIPTEN_KEEPALIVE void web_set_option(int key,double value){
     if(!std::isfinite(value))return;
     bool changed=false;auto assign=[&changed,value](auto& setting){using T=std::decay_t<decltype(setting)>;T next=static_cast<T>(value);changed=setting!=next;setting=next;};
@@ -211,6 +212,8 @@ EMSCRIPTEN_KEEPALIVE void web_set_option(int key,double value){
     case 49:assign(progdefaults.DOMINOEX_FEC);break;case 50:assign(progdefaults.DOMINOEX_FILTER);break;case 51:assign(progdefaults.DOMINOEX_BW);break;
     case 52:assign(progdefaults.SearchRange);break;case 53:assign(progdefaults.fsq_movavg);break;case 54:assign(progdefaults.fsqhits);break;case 55:assign(progdefaults.fsq_lowercase);break;
     case 56:assign(progdefaults.wfPreFilter);break;case 57:assign(progdefaults.wf_latency);break;
+    case 58:if(auto* dtmf=dynamic_cast<WebDtmf*>(decoder.get()))dtmf->tone_ms=int(clamp(value,40.0,2000.0));break;
+    case 59:if(auto* dtmf=dynamic_cast<WebDtmf*>(decoder.get()))dtmf->gap_ms=int(clamp(value,30.0,2000.0));break;
     }
     if(changed&&active_modem){if(key>=4&&key<=8&&active_modem->get_mode()==MODE_RTTY)active_modem->restart();if(key>=15&&key<=23&&active_modem->get_mode()==MODE_CW){active_modem->sync_parameters();active_modem->reset_rx_filter();}if(key>=24&&key<=28&&std::string(web_family(active_modem->get_mode()))=="Hellschreiber")active_modem->restart();if(key==29&&active_modem->get_mode()==MODE_IFKP)active_modem->restart();if(key>=31&&key<=34)if(auto modem=dynamic_cast<olivia*>(active_modem))modem->restart();if(key>=35&&key<=38)if(auto modem=dynamic_cast<contestia*>(active_modem))modem->restart();if(key==43&&active_modem->get_mode()==MODE_FSQ)active_modem->restart();}
     if(changed&&active_modem){if(key==46&&active_modem->get_mode()==MODE_RTTY)active_modem->restart();if(key==50||key==51)if(auto modem=dynamic_cast<dominoex*>(active_modem))modem->restart();if(key>=53&&key<=55&&active_modem->get_mode()==MODE_FSQ)active_modem->restart();}

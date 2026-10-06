@@ -4,6 +4,7 @@ export const defaults = {
   callsign:'', operatorName:'', qth:'', locator:'', rxFont:'Courier New', rxFontSize:14, rxColor:'#fff3bd', txColor:'#c4ebfc', rxWrap:true,
   inputDevice:'default', channel:'left', rxPpm:0, inputGain:0, playbackVolume:0.5,
   txVolume:0.5,txPpm:0,txOffset:0,txFrequencyLock:false,txFrequency:1500,
+  dtmfToneMs:50,dtmfGapMs:50,
   rttyShift:3, rttyBaud:1, rttyBits:0, rttyParity:0, rttyStop:1, lowercase:false,
   lowCutoff:0,highCutoff:4000,cwSpeed:18,cwBandwidth:150,cwTrack:true,cwMatched:false,cwRange:10,cwMin:5,cwMax:50,cwFilter:2,cwSom:false,
   hellAgc:2,hellWidth:2,hellHeight:20,hellBandwidth:245,hellBlackboard:false,fsqBaud:4.5,ifkpBaud:1,ifkpLowercase:true,
@@ -28,6 +29,10 @@ export function validatedConfig(candidate) {
   result.playbackVolume=Math.max(0,Math.min(1,result.playbackVolume));
   result.txVolume=Math.max(0,Math.min(1,result.txVolume));result.txPpm=Math.max(-5000,Math.min(5000,result.txPpm));
   result.txOffset=Math.max(-500,Math.min(500,result.txOffset));result.txFrequency=Math.max(0,Math.min(4000,result.txFrequency));
+  result.callsign=result.callsign.trim().toUpperCase();
+  if(!/^[A-Z0-9/]{0,32}$/.test(result.callsign))result.callsign=defaults.callsign;
+  result.dtmfToneMs=Math.round(Math.max(40,Math.min(2000,result.dtmfToneMs)));
+  result.dtmfGapMs=Math.round(Math.max(30,Math.min(2000,result.dtmfGapMs)));
   if(!['left','right','mix'].includes(result.channel))result.channel='left';
   if(!['USB','LSB'].includes(result.sideband))result.sideband='USB';
   if(!['NORM','FAST','SLOW'].includes(result.speed))result.speed='NORM';

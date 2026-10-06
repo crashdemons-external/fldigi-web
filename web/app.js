@@ -21,6 +21,165 @@ const workflowUI=createWorkflowFilter(workflowCatalog,workflow,document);
 const decodeEnabled=workflowUI.includes('decode'),encodeEnabled=workflowUI.includes('encode');
 document.documentElement.dataset.workflow=workflow;
 workflowUI.apply();
+// Keep the compact main screen understandable on hover, including controls
+// whose short labels or symbols are familiar mainly to fldigi operators.
+const mainTooltips={
+  'menu-file':'Open audio, save or clear decoded text, and import or export settings.',
+  'menu-audio':'Open audio input, start microphone capture, generate transmit audio, or stop audio.',
+  'menu-live':'Start or stop microphone capture and decode nearby radio audio (F3).',
+  'menu-generate-audio':'Encode the transmit text and download a complete WAV file.',
+  'menu-send-image':'Choose an image to send by realtime audio or as a WAV file.',
+  'menu-open-audio':'Load a recording, play it, and decode its radio signals (Ctrl+O).',
+  'menu-stop-audio':'Stop playback or transmission immediately and stop microphone capture.',
+  'menu-export-text':'Download all decoded receive text as a text file (Ctrl+S).',
+  'menu-clear-text':'Erase the decoded receive text currently shown.',
+  'menu-import-config':'Load saved fldigi browser settings from a JSON file.',
+  'menu-export-config':'Download the current fldigi browser settings as a JSON file.',
+  'menu-op-mode':'Choose the radio modem used to decode and encode digital signals.',
+  'menu-configure':'Open receiver, modem, waterfall, and interface settings.',
+  'menu-config-operator':'Set your sender callsign for FSQ and IFKP transmit text.',
+  'menu-config-soundcard':'Choose browser audio devices and adjust input and output levels.',
+  'menu-config-modems':'Configure modem options such as baud rate, shift, and tone settings.',
+  'menu-config-waterfall':'Adjust waterfall colors, display, and signal display behavior.',
+  'menu-config-ui':'Change the text panes and interface appearance.',
+  'menu-config-rig':'Radio rig control is not available in this browser build.',
+  'menu-config-io':'External radio and hardware interfaces are not available in this browser build.',
+  'menu-view':'Show or hide display panels and clear the signal history.',
+  'menu-channels':'Show or hide the decoded PSK channel list.',
+  'menu-scope':'Show or hide the signal scope beside the waterfall.',
+  'menu-picture':'Open the image decoded from a supported fax or image signal.',
+  'menu-fullscreen':'Expand the receiver to fill the browser window.',
+  'menu-clear-waterfall':'Erase the signal history currently drawn in the waterfall.',
+  'menu-logbook':'Logbook features are unavailable in this browser build.',
+  'menu-open-logbook':'Open a contact logbook; logging integrations are unavailable here.',
+  'menu-log-qso':'Record the current contact in a logbook; unavailable in this build.',
+  'menu-external-logger':'Send contact details to an external logger; unavailable in this build.',
+  'menu-help':'Open operating instructions, documentation, diagnostic information, and license details.',
+  'help-beginners':'Open the local beginner guide to receiving digital radio signals.',
+  'help-online':'Open the official fldigi documentation in a new browser tab.',
+  'help-website':'Open the official fldigi project website in a new browser tab.',
+  'help-reception-reports':'Open PSK Reporter to view reception reports from radio stations.',
+  'help-command-line':'Command-line options apply to the native application, not this browser receiver.',
+  'help-audio-info':'Show browser audio device, sample-rate, and microphone permission information.',
+  'help-build-info':'Show the decoder build, supported modes, and source version information.',
+  'help-event-log':'Show recent receiver and audio events to help diagnose problems.',
+  'help-about':'Show the fldigi browser receiver version and project information (A).',
+  'help-browser':'Open instructions for loading recordings, using the microphone, and decoding signals.',
+  'help-source':'Open the source code repository for this browser receiver.',
+  'help-license':'Open the software license and distribution terms.',
+  'spot':'Send a reception spot to a spotting network; unavailable in this browser build.',
+  'rx-id':'Automatically identify the received modem; unavailable in this build.',
+  'tx-id':'Transmit a modem identification signal; unavailable in this build.',
+  'tune-carrier':'Transmit a steady tuning tone; unavailable in this build.',
+  'radio-frequency':'Displayed radio dial frequency. This is a display; tune the radio separately.',
+  'radio-bandwidth':'Radio audio bandwidth in hertz, when supplied by the radio.',
+  'shortcut-open-audio':'Load and decode a recorded audio file from your computer.',
+  'shortcut-live':'Start or stop decoding live audio from your microphone (F3).',
+  'shortcut-configure':'Open browser sound-card settings to select audio devices and levels.',
+  'qso-frequency':'Radio frequency for the current contact; rig control is unavailable here.',
+  'qso-on':'Enable radio rig control for this contact; unavailable in this browser build.',
+  'rig-offset':'Frequency offset reported by a connected radio; rig control is unavailable.',
+  'frequency-top':'Audio tone frequency in hertz used to tune the modem within the radio passband.',
+  'input-level':'Current browser audio input level.',
+  'output-level':'Transmit audio output level; output metering is unavailable in this receiver build.',
+  'contact-call':'Contact callsign field; contact logging is not available in this browser build.',
+  'contact-name':'Contact operator name field; contact logging is not available in this browser build.',
+  'contact-azimuth':'Radio bearing to the contact; contact lookup is not available in this build.',
+  'contact-qth':'Contact location field; contact logging is not available in this browser build.',
+  'contact-state':'Contact state or region field; contact logging is not available in this build.',
+  'contact-province':'Contact province field; contact logging is not available in this build.',
+  'contact-locator':'Contact Maidenhead grid locator field; contact logging is unavailable here.',
+  'rig-status':'Radio rig-control status; hardware rig control is unavailable in this browser build.',
+  'external-station-info':'Station details supplied by an external radio interface; unavailable here.',
+  'channel-list':'Detected PSK conversations. Select a row to tune the decoder to that signal.',
+  'channel-search':'Filter the channel list by callsign or decoded text.',
+  'channel-squelch-label':'Current channel-list squelch threshold.',
+  'channel-squelch':'Set how strong a PSK signal must be before it appears in the channel list.',
+  'clear-channels':'Remove all currently detected conversations from the channel list.',
+  'rx-text':'Decoded receive text appears here. This read-only text can be saved or cleared.',
+  'tx-text':'Text entered here is encoded as radio modem audio for WAV download or realtime transmission.',
+  'play-file':'Play the loaded recording and decode its radio signals.',
+  'stop-file':'Stop the loaded recording.',
+  'file-name':'Name of the audio recording currently loaded for decoding.',
+  'file-position':'Seek through the loaded recording; decoding follows playback.',
+  'file-time':'Current playback time and total recording length.',
+  'file-mute':'Mute or restore audio playback without stopping decoding.',
+  'close-file':'Unload the current audio recording and return to idle receive.',
+  'tx-cancel':'Stop realtime transmit audio immediately.',
+  'tx-audio-info':'Status of the current realtime transmit audio session.',
+  'secondary-text':'Additional decoded text reported by the selected modem.',
+  'macro-cq':'CQ macro: insert a general calling message into transmit text.',
+  'macro-answer':'Answer macro: insert a reply to a calling station.',
+  'macro-qso':'QSO macro: insert a contact conversation message.',
+  'macro-kn':'KN macro: insert a message ending that invites only the named station to reply.',
+  'macro-sk':'SK macro: insert a sign-off message ending the contact.',
+  'macro-station':'Insert your configured callsign and station location into transmit text.',
+  'macro-brag':'Insert your configured station and equipment details into transmit text.',
+  'macro-empty':'Empty macro slot; no transmit message is configured.',
+  'macro-tr':'T/R: switch between receiving and realtime transmission; during transmit, finish the queued message.',
+  'macro-tx':'Start or continue realtime transmission of the text in the transmit pane.',
+  'rx-button':'Start or stop live microphone capture and decode nearby radio audio (F3).',
+  'macro-tx-start':'Transmit the current text as realtime modem audio.',
+  'macro-page':'Macro button page indicator; macro pages are not configurable in this browser build.',
+  'waterfall':'Audio waterfall: colors show signal energy over time and tone frequency. Hover to preview a frequency; click to tune.',
+  'frequency-scale':'Frequency scale for the audio waterfall, in hertz.',
+  'tuning-cursor':'Marker showing the currently selected modem tone frequencies.',
+  'scope':'Signal scope: view the incoming audio waveform or spectrum to identify and tune signals.',
+  'signal-meter':'Detected audio signal level. This meter helps judge signal strength, not radio transmit power.',
+  'squelch-slider':'Drag to set the signal level below which decoded receive output is suppressed.',
+  'display-mode':'Switch the main signal display between waterfall (WF) and spectrum (FFT).',
+  'reference-decrease':'Lower the waterfall reference level by one step.',
+  'reference':'Waterfall reference level in decibels; adjust the color scale baseline.',
+  'reference-increase':'Raise the waterfall reference level by one step.',
+  'span-decrease':'Decrease the waterfall amplitude span by one step.',
+  'span':'Waterfall amplitude span in decibels; adjust the contrast range.',
+  'span-increase':'Increase the waterfall amplitude span by one step.',
+  'magnification':'Current waterfall frequency magnification. Click to zoom around the tuned frequency.',
+  'waterfall-pause':'Pause or resume waterfall updates while audio continues to decode.',
+  'waterfall-speed':'Waterfall scroll speed. Click to cycle through available speeds.',
+  'tune-down-100':'Move decoder tuning down by 100 hertz.',
+  'tune-down-10':'Move decoder tuning down by 10 hertz.',
+  'frequency':'Receive audio tone frequency in hertz. Enter a frequency or tune by clicking the waterfall.',
+  'tune-up-10':'Move decoder tuning up by 10 hertz.',
+  'tune-up-100':'Move decoder tuning up by 100 hertz.',
+  'qsy':'Change radio frequency to follow the selected audio tone; radio rig control is unavailable.',
+  'store-frequency':'Save the current radio frequency; this receiver saves tuning changes automatically.',
+  'frequency-lock':'Keep the transmit audio tone at its set frequency while receive tuning changes.',
+  'reverse':'Reverse modem tone order for signals using the opposite sideband or tone orientation.',
+  'waterfall-tr':'Switch receive and transmit using the radio rig; rig control is unavailable here.',
+  'current-mode':'Current modem. Click to choose a different digital radio mode.',
+  'status1':'Signal-to-noise (S/N) measurement reported by the selected modem.',
+  'status2':'Intermodulation distortion (IMD) measurement reported by the selected modem.',
+  'status-message':'Receiver status, including audio input, decoder readiness, and errors.',
+  'source-indicator':'Current audio source or receiver state: radio input (RX/LIVE), recording (FILE), or transmit (TX).',
+  'squelch-decrease':'Lower the signal threshold required for decoded receive output.',
+  'squelch':'Squelch threshold: suppress decoded text when signal strength is below this level.',
+  'squelch-increase':'Raise the signal threshold required for decoded receive output.',
+  'afc':'Automatic Frequency Control: follow small signal frequency drift while decoding.',
+  'sql':'Squelch: suppress decoded output when the received signal is below the threshold.',
+  'kpsql':'KPSQL squelch feature is not available in this browser build.'
+};
+for(const [id,title]of Object.entries(mainTooltips))if($(id))$(id).title=title;
+document.querySelector('.titlebar')?.setAttribute('title','fldigi digital radio decoder. Use the menus to select an audio source, modem, display, or settings.');
+document.querySelector('.app-icon')?.setAttribute('title','fldigi application icon.');
+document.querySelector('.window-buttons span:nth-child(1)')?.setAttribute('title','Decorative minimize symbol; use your browser controls to minimize the window.');
+document.querySelector('.window-buttons span:nth-child(2)')?.setAttribute('title','Decorative maximize symbol; use your browser controls to resize the window.');
+document.querySelector('.window-buttons span:nth-child(3)')?.setAttribute('title','Decorative close symbol; use your browser controls to close this page.');
+document.querySelector('.rig-buttons')?.setAttribute('title','Radio spotting and rig controls. Several controls are unavailable in this browser build.');
+document.querySelector('.station-panel')?.setAttribute('title','Radio frequency, audio tuning, and contact station information.');
+document.querySelector('.qso-row')?.setAttribute('title','Radio frequency and audio signal levels. Rig-control fields are unavailable in this browser build.');
+document.querySelector('.text-panels')?.setAttribute('title','The channel list, decoded receive text, and transmit message editor.');
+document.querySelector('.channel-panel')?.setAttribute('title','Detected PSK conversations. Select a row to tune the decoder to that signal.');
+document.querySelector('.macrobar')?.setAttribute('title','Quick message macros for composing and sending common amateur-radio messages.');
+document.querySelector('.waterfall-panel')?.setAttribute('title','Signal displays for finding, identifying, and tuning digital radio signals.');
+document.querySelector('.waterfall-controls')?.setAttribute('title','Adjust waterfall appearance and tune the decoder audio frequency.');
+document.querySelector('.statusbar')?.setAttribute('title','Current modem, signal measurements, audio source, squelch, and decoder options.');
+document.querySelectorAll('.playback-bar').forEach(bar=>bar.title=bar.classList.contains('tx-audio-bar')?'Controls and status for realtime transmit audio.':'Controls for playing and decoding the loaded audio recording.');
+document.querySelector('.window-buttons')?.setAttribute('title','Decorative window controls; use your browser controls to minimize, maximize, or close this page.');
+document.querySelector('.blank-button')?.setAttribute('title','Reserved radio-control button slot; no action is available in this browser build.');
+document.querySelector('.diamond')?.setAttribute('title','Status-bar separator between squelch controls and modem indicators.');
+$('mode-menu').title='Choose the digital modem used to decode and encode signals.';
+$('signal-meter-fill').title='Current detected signal strength shown by the signal meter.';
 // Stable IDs for dynamically created controls cataloged in workflow.json.
 const controlId = (prefix,name) => prefix+'-'+encodeURIComponent(name);
 // fldigi 4.2.13 comments out its OFDM Op Mode submenu pending development;
@@ -41,7 +200,7 @@ let waterfallOffset=0,displayMagnification=1,hoverPointer,cursorHideTimer;
 let configDraft,configPage='Soundcard/Devices',devices=[];
 let pictureData,pictureSerial=0,rasterX=0,rasterY=0;
 const audio=$('audio-file');
-const rasterCanvas=document.createElement('canvas');rasterCanvas.id='rx-raster';rasterCanvas.setAttribute('aria-label','Decoded Hellschreiber raster');rasterCanvas.hidden=true;$('rx-text').after(rasterCanvas);
+const rasterCanvas=document.createElement('canvas');rasterCanvas.id='rx-raster';rasterCanvas.setAttribute('aria-label','Decoded Hellschreiber raster');rasterCanvas.title='Decoded Hellschreiber signal raster. Dark pixels represent received signal marks.';rasterCanvas.hidden=true;$('rx-text').after(rasterCanvas);
 const history=document.createElement('canvas'); const historyContext=history.getContext('2d');
 const waterfallContext=$('waterfall').getContext('2d');
 const scopeDisplay=createScope($('scope'));
@@ -68,7 +227,7 @@ function configureDecoder(retune=false){
 function syncFrequencyInputs(){for(const id of ['frequency','frequency-top'])if(document.activeElement!==$(id))$(id).value=Math.round(settings.frequency);}
 function syncSquelchControls(){
   $('squelch').value=settings.squelch;$('squelch-slider').value=settings.squelch;
-  $('squelch-slider').title=`Squelch level: ${settings.squelch} (drag up to increase)`;
+  $('squelch-slider').title=`Squelch threshold ${settings.squelch}: drag to change the minimum signal level that can produce decoded receive text.`;
 }
 function setSquelch(value){
   const number=Number(value);if(!Number.isFinite(number))return;
@@ -79,10 +238,9 @@ function setSquelch(value){
 function applySettings(persist=true){
   document.documentElement.style.setProperty('--rx',settings.rxColor);
   document.documentElement.style.setProperty('--tx',settings.txColor);
-  $('rx-text').style.fontFamily=`${settings.rxFont}, monospace`;$('rx-text').style.fontSize=settings.rxFontSize+'px';$('tx-text').style.fontSize=settings.rxFontSize+'px';
-  $('rx-text').style.whiteSpace=settings.rxWrap?'pre-wrap':'pre';$('rx-text').wrap=settings.rxWrap?'soft':'off';
+  for(const id of ['rx-text','tx-text']){$(id).style.fontFamily=`${settings.rxFont}, monospace`;$(id).style.fontSize=settings.rxFontSize+'px';$(id).style.whiteSpace=settings.rxWrap?'pre-wrap':'pre';$(id).wrap=settings.rxWrap?'soft':'off';}
   const titleSuffix=workflow==='both'?'encode/decode':`${workflow} workflow`;
-  $('window-title').textContent=`fldigi - NO CALLSIGN SET (${titleSuffix})`;
+  $('window-title').textContent=`fldigi - ${settings.callsign||'NO CALLSIGN SET'} (${titleSuffix})`;
   document.title=$('window-title').textContent;
   $('tx-text').setAttribute('aria-label',encodeEnabled?'Transmit text':'Transmit text (disabled)');
   $('tx-text').title=encodeEnabled?'Compose text for TX generate or realtime playback. During TX, append text at the end; T/R finishes the session.':'Transmission is disabled in this receive version';
@@ -162,24 +320,24 @@ function buildModeMenu(){
   $('mode-options').replaceChildren();
   for(const [name,group]of groups){
     const speedMenu=speedPresetMenus[name];
-    if(group.length===1&&name!=='RTTY'&&!speedMenu){const button=document.createElement('button');button.id=controlId('mode',group[0].name);button.textContent=displayModeName(group[0]);button.disabled=!group[0].enabled;button.addEventListener('click',()=>selectMode(group[0]));$('mode-options').append(button);continue;}
-    const parent=document.createElement('div');parent.className='mode-family menu-branch';const heading=document.createElement('button');heading.id=controlId('mode-family',name);heading.className='family-heading submenu-heading';heading.textContent=name;heading.disabled=group.every(m=>!m.enabled);heading.setAttribute('aria-haspopup','true');heading.setAttribute('aria-expanded','false');parent.append(heading);
+    if(group.length===1&&name!=='RTTY'&&!speedMenu){const button=document.createElement('button');button.id=controlId('mode',group[0].name);button.textContent=displayModeName(group[0]);button.title=`Select ${displayModeName(group[0])} to decode and encode signals using this modem.`;button.disabled=!group[0].enabled;button.addEventListener('click',()=>selectMode(group[0]));$('mode-options').append(button);continue;}
+    const parent=document.createElement('div');parent.className='mode-family menu-branch';const heading=document.createElement('button');heading.id=controlId('mode-family',name);heading.className='family-heading submenu-heading';heading.textContent=name;heading.title=`Open ${name} modem choices for decoding and encoding digital radio signals.`;heading.disabled=group.every(m=>!m.enabled);heading.setAttribute('aria-haspopup','true');heading.setAttribute('aria-expanded','false');parent.append(heading);
     const submenu=document.createElement('div');submenu.className='mode-submenu menu-submenu';
     if(name==='RTTY'){
-      for(const preset of rttyPresets){const button=document.createElement('button');button.id=controlId('mode-preset',preset.label);button.textContent=preset.label;button.addEventListener('click',()=>{for(const key of ['rttyBaud','rttyShift','rttyBits'])settings[key]=preset[key];selectMode(group[0]);});submenu.append(button);}
-      submenu.append(document.createElement('hr'));const custom=document.createElement('button');custom.id='mode-rtty-custom';custom.textContent='Custom...';custom.addEventListener('click',()=>{selectMode(group[0]);openConfig('Modem/RTTY');});submenu.append(custom);
+      for(const preset of rttyPresets){const button=document.createElement('button');button.id=controlId('mode-preset',preset.label);button.textContent=preset.label;button.title=`Select RTTY and set its baud rate, shift, and data format to ${preset.label}.`;button.addEventListener('click',()=>{for(const key of ['rttyBaud','rttyShift','rttyBits'])settings[key]=preset[key];selectMode(group[0]);});submenu.append(button);}
+      submenu.append(document.createElement('hr'));const custom=document.createElement('button');custom.id='mode-rtty-custom';custom.textContent='Custom...';custom.title='Select RTTY and open its settings to choose custom baud rate, shift, and data format.';custom.addEventListener('click',()=>{selectMode(group[0]);openConfig('Modem/RTTY');});submenu.append(custom);
     }else if(speedMenu){
-      for(const [label,value] of speedMenu.presets){const button=document.createElement('button');button.id=controlId('mode-preset',label);button.textContent=label;button.addEventListener('click',()=>{settings[speedMenu.setting]=value;selectMode(group[0]);});submenu.append(button);}
-    }else for(const mode of group){const button=document.createElement('button');button.id=controlId('mode',mode.name);button.textContent=displayModeName(mode);button.disabled=!mode.enabled;button.addEventListener('click',()=>selectMode(mode));submenu.append(button);}
+      for(const [label,value] of speedMenu.presets){const button=document.createElement('button');button.id=controlId('mode-preset',label);button.textContent=label;button.title=`Set ${name} modem speed to ${label} for decoding and encoding.`;button.addEventListener('click',()=>{settings[speedMenu.setting]=value;selectMode(group[0]);});submenu.append(button);}
+    }else for(const mode of group){const button=document.createElement('button');button.id=controlId('mode',mode.name);button.textContent=displayModeName(mode);button.title=`Select ${displayModeName(mode)} to decode and encode signals using this modem.`;button.disabled=!mode.enabled;button.addEventListener('click',()=>selectMode(mode));submenu.append(button);}
     parent.append(submenu);$('mode-options').append(parent);
   }
   const dtmf=modes.find(mode=>mode.family==='DTMF'&&selectableMode(mode));
-  if(dtmf){const button=document.createElement('button');button.id=controlId('mode',dtmf.name);button.textContent=displayModeName(dtmf);button.addEventListener('click',()=>selectMode(dtmf));$('mode-options').append(document.createElement('hr'),button);}
+  if(dtmf){const button=document.createElement('button');button.id=controlId('mode',dtmf.name);button.textContent=displayModeName(dtmf);button.title='Select DTMF to decode and generate keypad tones at fixed audio frequencies.';button.addEventListener('click',()=>selectMode(dtmf));$('mode-options').append(document.createElement('hr'),button);}
   bindMenuBranches($('mode-options'));
   workflowUI.apply();
 }
 function selectMode(mode){if(transmitter?.active||!workflowMode(mode))return;settings.modeName=mode.name;settings.mode=mode.id;applySettings();closeMenus();status(`${displayModeName(mode)} · ${decodeEnabled?(live?'Live audio':fileUrl?'Audio file ready':'Receiver ready'):'Encoder ready'}`);}
-const channelRows=Array.from({length:30},(_,index)=>{const row=document.createElement('div');row.id=controlId('channel-row',index+1);row.className='channel-row';const f=document.createElement('span');f.className='channel-frequency';const text=document.createElement('span');row.append(f,text);row.addEventListener('click',()=>{if(row.dataset.frequency)tune(row.dataset.frequency);});$('channel-list').append(row);return row;});
+const channelRows=Array.from({length:30},(_,index)=>{const row=document.createElement('div');row.id=controlId('channel-row',index+1);row.className='channel-row';row.title='Detected PSK channel. When a signal appears here, click to tune the decoder to its audio frequency.';const f=document.createElement('span');f.className='channel-frequency';const text=document.createElement('span');row.append(f,text);row.addEventListener('click',()=>{if(row.dataset.frequency)tune(row.dataset.frequency);});$('channel-list').append(row);return row;});
 const worker=new Worker(new URL('./decoder-worker.js',import.meta.url),{type:'module'});
 worker.onerror=event=>{status('Decoder failed to start. Run the Emscripten build and serve this page over localhost or HTTPS.',true);console.error(event.message);};
 worker.onmessage=({data})=>{
@@ -198,7 +356,7 @@ worker.onmessage=({data})=>{
       settings.frequency=data.frequency;syncFrequencyInputs();
     }
     const signalLevel=Math.max(0,Math.min(100,data.metric));$('signal-meter-fill').style.height=signalLevel+'%';$('signal-meter').setAttribute('aria-valuenow',String(Math.round(signalLevel)));updateTuningCursor();drawWaterfall();drawScope();
-    data.channels.forEach((channel,i)=>{const row=channelRows[i];row.dataset.frequency=channel.frequency||'';row.children[0].textContent=channel.frequency?channel.frequency.toFixed(1):'';row.children[1].textContent=channel.text;});
+    data.channels.forEach((channel,i)=>{const row=channelRows[i];row.dataset.frequency=channel.frequency||'';row.children[0].textContent=channel.frequency?channel.frequency.toFixed(1):'';row.children[1].textContent=channel.text;row.title=channel.frequency?`Detected PSK signal at ${channel.frequency.toFixed(1)} Hz: ${channel.text||'no decoded text yet'}. Click to tune the decoder to this signal.`:'Detected PSK channel. Click an active row to tune the decoder to its audio frequency.';});
     if(data.raster.length)drawRaster(data.raster,data.rasterHeight);
     if(data.imageUpdates.length)drawPicture(data);
   }
@@ -301,7 +459,7 @@ function closeFile(){
 }
 function stopAudio(){transmitter?.cancel();if(!decodeEnabled)return;stopLive();resetAudioPipeline('none');audio.pause();if(fileUrl&&audio.currentTime!==0)audio.currentTime=0;status('Audio stopped');}
 function formatTime(seconds){if(!Number.isFinite(seconds))return '0:00';return Math.floor(seconds/60)+':'+String(Math.floor(seconds%60)).padStart(2,'0');}
-function syncPlaybackButton(){const playing=!audio.paused&&!audio.ended;$('play-file').textContent=playing?'Ⅱ':'▶';$('play-file').setAttribute('aria-label',playing?'Pause playback':'Play audio file');$('play-file').title=playing?'Pause playback':'Play audio file';}
+function syncPlaybackButton(){const playing=!audio.paused&&!audio.ended;$('play-file').textContent=playing?'Ⅱ':'▶';$('play-file').setAttribute('aria-label',playing?'Pause playback':'Play audio file');$('play-file').title=playing?'Pause the recording; decoding pauses with playback.':'Play the loaded recording and decode its radio signals.';}
 for(const eventName of ['play','pause','ended','emptied'])audio.addEventListener(eventName,syncPlaybackButton);
 audio.addEventListener('play',()=>{if(!decodeEnabled||!fileUrl||live||openingLive||transmitter?.active){audio.pause();return;}if(activeInput!=='file')resetAudioPipeline('file');fileWorklet?.port.postMessage({active:!audio.seeking,generation:audioGeneration});$('source-indicator').textContent='FILE';status('Playing and decoding: '+$('file-name').textContent);});
 audio.addEventListener('pause',()=>{if(!audio.paused||activeInput!=='file'||audio.seeking)return;fileWorklet?.port.postMessage({command:'flush',generation:audioGeneration});if(fileUrl)status('Audio playback paused');});
@@ -370,7 +528,7 @@ const actions={
   'clear-channels':()=>{postDecoder({type:'clear-channels'});channelRows.forEach(row=>{row.children[0].textContent=row.children[1].textContent='';});},
   'audio-info':showAudioInfo,'build-info':showBuildInfo,
   'event-log':()=>showMessage('Event log',eventLog.map(entry=>`${entry.time}  ${entry.error?'ERROR':'INFO'}  ${entry.message}`).join('\n')||'No events recorded in this session.','fldigi-event-log.txt'),
-  help:()=>showMessage('fldigi browser audio','Use File → Audio → Playback (load audio file) to select a recording, then press ▶. Choose RX capture (use mic), click Rx, or press F3 for live microphone or audio-device input. Starting mic capture closes the loaded recording; loading a recording stops mic capture. Choose ?workflow=encode, ?workflow=both, or ?workflow=full to enable transmit controls. Compose text in the TX pane. File → Audio → TX generate renders and downloads a complete WAV file. T/R or Tx plays realtime modem audio; append text while transmitting, then T/R or Rx finishes the queued message and modem tail. If microphone receive was active, its stream stays open during TX and receive resumes after the tail without another permission request. ■ or File → Audio → Stop audio stops immediately, releases microphone access, and leaves receive off.\n\nSelect the signal mode under Op Mode, then click a signal in the waterfall to tune. AFC follows frequency drift. SQL suppresses output below the selected signal threshold.\n\nDTMF is at the bottom of Op Mode, below the separator. It decodes and generates keypad tones at fixed audio frequencies; tuning is inactive. The squelch threshold always applies. Switching modes disables DTMF.\n\nConfigure → Sound card chooses the input channel, input device, gain, and sample-rate correction. Configuration is saved in this browser. File exports download a file; imports use a file picker.\n\nCapture requires HTTPS or localhost. Audio remains on this computer. Audio generation is available for text modes and DTMF. WEFAX image generation, rig control, TxID/RxID, and external application connections remain unavailable. Decoder state resets when seeking in a recording.'),
+  help:()=>showMessage('fldigi browser audio','Use File → Audio → Playback (load audio file) to select a recording, then press ▶. Choose RX capture (use mic), click Rx, or press F3 for live microphone or audio-device input. Starting mic capture closes the loaded recording; loading a recording stops mic capture. Choose ?workflow=encode, ?workflow=both, or ?workflow=full to enable transmit controls. Compose text in the TX pane. File → Audio → TX generate renders and downloads a complete WAV file. T/R or Tx plays realtime modem audio; append text while transmitting, then T/R or Rx finishes the queued message and modem tail. If microphone receive was active, its stream stays open during TX and receive resumes after the tail without another permission request. ■ or File → Audio → Stop audio stops immediately, releases microphone access, and leaves receive off.\n\nSelect the signal mode under Op Mode, then click a signal in the waterfall to tune. AFC follows frequency drift. SQL suppresses output below the selected signal threshold.\n\nDTMF is at the bottom of Op Mode, below the separator. It decodes and generates keypad tones at fixed audio frequencies; tuning is inactive. The squelch threshold always applies. Switching modes disables DTMF. Configure → Misc → DTMF sets tone duration, the gap between digits, and receive squelch.\n\nConfigure → Sound card chooses the input channel, input device, gain, and sample-rate correction. Configuration is saved in this browser. File exports download a file; imports use a file picker.\n\nCapture requires HTTPS or localhost. Audio remains on this computer. Audio generation is available for text modes and DTMF. WEFAX image generation, rig control, TxID/RxID, and external application connections remain unavailable. Decoder state resets when seeking in a recording.'),
   about:()=>showMessage('About fldigi','fldigi 4.2.13-alpha3 · Browser audio port\n\nOriginal fldigi modem and DSP sources by Dave Freese, W1HKJ, and the fldigi contributors. Compiled with Emscripten.\n\nGNU GPL version 3 or later. Corresponding source and build scripts are included in this project. See COPYING and THIRD_PARTY_NOTICES.md.\n\nThis version supports microphone input and local audio-file playback in decode, both, and full workflows. Workflow tags control UI availability. Encode, both, and full workflows support WAV rendering and realtime TX playback. Desktop hardware integrations remain unavailable.\n\nIcons: original fldigi artwork and Font Awesome Free 7.2.0 by Fonticons, Inc. (CC BY 4.0). See THIRD_PARTY_NOTICES.md and icons/fontawesome/LICENSE.txt for the icon notices.'),
 };
 document.querySelectorAll('[data-action]').forEach(button=>button.addEventListener('click',()=>{closeMenus();actions[button.dataset.action]?.();}));
@@ -459,9 +617,9 @@ function drawWaterfall(add=true){
 function drawScope(){scopeDisplay.draw();}
 new ResizeObserver(resizeCanvases).observe($('waterfall').parentElement);
 async function refreshDevices(){if(!decodeEnabled)return;try{devices=(await navigator.mediaDevices.enumerateDevices()).filter(device=>device.kind==='audioinput');if($('configuration').open&&configPage==='Soundcard/Devices')renderConfigPage();}catch{devices=[];}}
-const configSections=[['Configure'],['Colors-Fonts'],['Contests',true],['IDs',true],['Logging',true],['Modem'],['Modem/PSK'],['Modem/RTTY'],['Modem/CW'],['Modem/MFSK'],['Modem/THOR'],['Modem/DominoEX'],['Modem/Throb'],['Modem/MT63'],['Modem/FSQ'],['Modem/Hellschreiber'],['Modem/IFKP'],['Modem/WEFAX'],['Modem/Olivia'],['Modem/Contestia'],['Misc'],['Operator-Station'],['Rig Control',true],['Soundcard'],['Soundcard/Devices'],['Soundcard/Right channel'],['Soundcard/Settings'],['Soundcard/Signal Level'],['Soundcard/Wav file recording',true],['UI'],['Waterfall'],['Web',true],['Autostart',true],['IO',true]];
+const configSections=[['Configure'],['Colors-Fonts'],['Contests',true],['IDs',true],['Logging',true],['Modem'],['Modem/PSK'],['Modem/RTTY'],['Modem/CW'],['Modem/MFSK'],['Modem/THOR'],['Modem/DominoEX'],['Modem/Throb'],['Modem/MT63'],['Modem/FSQ'],['Modem/Hellschreiber'],['Modem/IFKP'],['Modem/WEFAX'],['Modem/Olivia'],['Modem/Contestia'],['Misc'],['Misc/DTMF'],['Operator-Station'],['Rig Control',true],['Soundcard'],['Soundcard/Devices'],['Soundcard/Right channel'],['Soundcard/Settings'],['Soundcard/Signal Level'],['Soundcard/Wav file recording',true],['UI'],['Waterfall'],['Web',true],['Autostart',true],['IO',true]];
 const collapsedSections=new Set();
-const treeGroups=['Modem','Soundcard'];
+const treeGroups=['Modem','Misc','Soundcard'];
 function preferredConfigPage(page){
   const soundcard=decodeEnabled?'Soundcard/Devices':'Soundcard/Settings';
   const name=page==='Configure'?(workflowUI.includes('rig')?'Operator-Station':soundcard):page==='Soundcard'?soundcard:page==='Modem'?'Modem/PSK':page||soundcard;
@@ -488,7 +646,7 @@ function configField(label,key,type='text',options,disabled=false){
   if(options){input=document.createElement('select');for(const [value,label]of options){const option=document.createElement('option');option.value=value;option.textContent=label;input.append(option);}}
   else{input=document.createElement('input');input.type=type;}
   input.id='config-'+key;input.disabled=disabled;row.classList.toggle('unavailable',disabled);if(type==='checkbox')input.checked=Boolean(configDraft[key]);else input.value=configDraft[key]??'';
-  const bounds={channelSquelch:[-3,6,.1],rttyCustomShift:[1,2000,1],pskSearchRange:[10,500,10],dominoBandwidth:[1,2,.1],fsqMovingAverage:[1,15,1],fsqPeakHits:[3,6,1],wfLatency:[1,16,1],playbackVolume:[0,1,.05],txVolume:[0,1,.05],txPpm:[-5000,5000,1],txOffset:[-500,500,1]}[key];
+  const bounds={cwSpeed:[5,100,1],dtmfToneMs:[40,2000,1],dtmfGapMs:[30,2000,1],squelch:[0,100,1],channelSquelch:[-3,6,.1],rttyCustomShift:[1,2000,1],pskSearchRange:[10,500,10],dominoBandwidth:[1,2,.1],fsqMovingAverage:[1,15,1],fsqPeakHits:[3,6,1],wfLatency:[1,16,1],playbackVolume:[0,1,.05],txVolume:[0,1,.05],txPpm:[-5000,5000,1],txOffset:[-500,500,1]}[key];
   if(type==='number'){input.step='any';if(bounds)[input.min,input.max,input.step]=bounds.map(String);}
   const readValue=()=>{configDraft[key]=type==='checkbox'?input.checked:typeof defaults[key]==='number'?Number(input.value):input.value;};input.addEventListener('input',readValue);input.addEventListener('change',readValue);row.append(input);return row;
 }
@@ -496,7 +654,7 @@ function fieldset(title,rows){const fieldset=document.createElement('fieldset');
 function note(text){const node=document.createElement('p');node.className='config-note';node.textContent=text;return node;}
 function renderConfigPage(){
   $('config-caption').textContent=configPage;const body=$('config-fields');body.replaceChildren();
-  if(configPage==='Operator-Station'){body.append(fieldset('Operator information',[configField('Callsign','callsign','text',null,true),configField('Name','operatorName','text',null,true),configField('QTH','qth','text',null,true),configField('Locator','locator','text',null,true),note('Station details are unused while logging, transmission, and directed replies are disabled.')]));}
+  if(configPage==='Operator-Station'){body.append(fieldset('Operator information',[configField('Callsign','callsign','text'),configField('Name','operatorName','text',null,true),configField('QTH','qth','text',null,true),configField('Locator','locator','text',null,true),note('Callsign identifies FSQ transmissions and supplies <MYCALL> in IFKP and FSQ transmit text. Name, QTH and locator require desktop logging support.')]));}
   else if(configPage==='Soundcard/Devices'){
     const selected=devices.some(d=>d.deviceId===configDraft.inputDevice)||configDraft.inputDevice==='default'?[]:[[configDraft.inputDevice,'Saved input (currently unavailable)']];
     body.append(fieldset('Audio input',[configField('Capture','inputDevice','text',[['default','Default audio input'],...selected,...devices.filter(d=>d.deviceId!=='default').map((d,i)=>[d.deviceId,d.label||'Audio input '+(i+1)])]),note('Microphone permission is requested when live capture starts. Saving a different device restarts active capture.'),...(live?[note('Active input: '+(stream?.getAudioTracks()[0]?.label||'Audio input'))]:[])]));
@@ -511,19 +669,20 @@ function renderConfigPage(){
     body.append(fieldset('Bandwidth tracks',[configField('Show tracks','useBWTracks','checkbox'),configField('Wide tracks','useWideTracks','checkbox')]));
     body.append(fieldset('FFT',[configField('Window','wfWindow','text',[[0,'Rectangular'],[1,'Blackman'],[2,'Hamming'],[3,'Hann'],[4,'Triangular']]),configField('Latency','wfLatency','number')]));
   }
-  else if(configPage==='UI'||configPage==='Colors-Fonts'){body.append(fieldset('Receive / transmit text',[configField('Font','rxFont','text',[['Courier New','Courier New'],['monospace','Monospace'],['Consolas','Consolas']]),configField('Font size','rxFontSize','number'),configField('Receive color','rxColor','color'),configField('Transmit color','txColor','color',null,true),configField('Word wrap','rxWrap','checkbox'),configField('Show channels','showChannels','checkbox')]));}
-  else if(configPage==='Modem/RTTY'){body.append(fieldset('Receive',[configField('Shift (Hz)','rttyShift','text',[...([23,85,160,170,182,200,240,350,425,850].map((v,i)=>[i,v])),[10,'Custom']]),configField('Custom shift (Hz)','rttyCustomShift','number'),configField('Baud','rttyBaud','text',[45,45.45,50,56,75,100,110,150,200,300].map((v,i)=>[i,v])),configField('Data bits','rttyBits','text',[[0,'5 (Baudot)'],[1,'7 (ASCII)'],[2,'8 (ASCII)']]),configField('Parity','rttyParity','text',[[0,'None'],[1,'Even'],[2,'Odd'],[3,'Zero'],[4,'One']]),configField('Stop bits','rttyStop','text',[[0,'1'],[1,'1.5'],[2,'2']]),configField('AFC speed','rttyAfcSpeed','text',[[0,'Slow'],[1,'Medium'],[2,'Fast']]),configField('Lower case','lowercase','checkbox'),configField('Reverse','reverse','checkbox')]));body.append(fieldset('Transmit',[configField('FSK keying','useFSK','checkbox',null,true)]));}
-  else if(configPage==='Modem/CW'){body.append(fieldset('Receive',[configField('Tracking','cwTrack','checkbox'),configField('Tracking range','cwRange','number'),configField('Minimum WPM','cwMin','number'),configField('Maximum WPM','cwMax','number'),configField('Matched filter','cwMatched','checkbox'),configField('SOM decoding','cwSom','checkbox')]));body.append(fieldset('Filter',[configField('Bandwidth (Hz)','cwBandwidth','number'),configField('Filter length','cwFilter','text',[[0,'128'],[1,'256'],[2,'512']]),configField('Reference WPM','cwSpeed','number')]));body.append(fieldset('Transmit',[configField('QSK','qsk','checkbox',null,true),configField('Keying','keying','text',null,true)]));}
+  else if(configPage==='UI'||configPage==='Colors-Fonts'){body.append(fieldset('Receive / transmit text',[configField('Font','rxFont','text',[['Courier New','Courier New'],['monospace','Monospace'],['Consolas','Consolas']]),configField('Font size','rxFontSize','number'),configField('Receive color','rxColor','color'),configField('Transmit color','txColor','color'),configField('Word wrap','rxWrap','checkbox'),configField('Show channels','showChannels','checkbox')]));}
+  else if(configPage==='Modem/RTTY'){body.append(fieldset('Receive / transmit',[configField('Shift (Hz)','rttyShift','text',[...([23,85,160,170,182,200,240,350,425,850].map((v,i)=>[i,v])),[10,'Custom']]),configField('Custom shift (Hz)','rttyCustomShift','number'),configField('Baud','rttyBaud','text',[45,45.45,50,56,75,100,110,150,200,300].map((v,i)=>[i,v])),configField('Data bits','rttyBits','text',[[0,'5 (Baudot)'],[1,'7 (ASCII)'],[2,'8 (ASCII)']]),configField('Parity','rttyParity','text',[[0,'None'],[1,'Even'],[2,'Odd'],[3,'Zero'],[4,'One']]),configField('Stop bits','rttyStop','text',[[0,'1'],[1,'1.5'],[2,'2']]),configField('AFC speed','rttyAfcSpeed','text',[[0,'Slow'],[1,'Medium'],[2,'Fast']]),configField('Lower case','lowercase','checkbox'),configField('Reverse','reverse','checkbox')]));body.append(fieldset('Transmit',[configField('FSK keying','useFSK','checkbox',null,true)]));}
+  else if(configPage==='Modem/CW'){body.append(fieldset('Receive',[configField('Tracking','cwTrack','checkbox'),configField('Tracking range','cwRange','number'),configField('Minimum WPM','cwMin','number'),configField('Maximum WPM','cwMax','number'),configField('Matched filter','cwMatched','checkbox'),configField('SOM decoding','cwSom','checkbox')]));body.append(fieldset('Filter',[configField('Bandwidth (Hz)','cwBandwidth','number'),configField('Filter length','cwFilter','text',[[0,'128'],[1,'256'],[2,'512']])]));body.append(fieldset('Transmit',[configField('Speed (WPM)','cwSpeed','number'),configField('QSK','qsk','checkbox',null,true),configField('Keying','keying','text',null,true)]));}
   else if(configPage==='Modem/Hellschreiber'){body.append(fieldset('Receive',[configField('AGC','hellAgc','text',[[1,'Slow'],[2,'Medium'],[3,'Fast']]),configField('Receive width','hellWidth','number'),configField('Receive height','hellHeight','number'),configField('Bandwidth (Hz)','hellBandwidth','number'),configField('Blackboard','hellBlackboard','checkbox')]));}
-  else if(configPage==='Modem/IFKP'){body.append(fieldset('Receive',[configField('Speed','ifkpBaud','text',[[0,'0.5'],[1,'1.0'],[2,'2.0']])]));body.append(fieldset('Transmit',[configField('MYCALL lower case','ifkpLowercase','checkbox',null,true)]));}
+  else if(configPage==='Modem/IFKP'){body.append(fieldset('Receive / transmit',[configField('Speed','ifkpBaud','text',[[0,'0.5'],[1,'1.0'],[2,'2.0']])]));body.append(fieldset('Transmit',[configField('MYCALL lower case','ifkpLowercase','checkbox'),note('Controls <MYCALL> in transmit text. Set your callsign under Operator-Station.')]));}
   else if(configPage==='Modem/PSK'){body.append(fieldset('Receive',[configField('AFC','afc','checkbox'),configField('Search range (Hz)','pskSearchRange','number'),configField('Squelch','sql','checkbox'),configField('Squelch level','squelch','number')]));}
   else if(configPage==='Modem/MT63'){body.append(fieldset('Receive',[configField('Long integration','mt63Integration','checkbox'),configField('8-bit characters (UTF-8)','mt638bit','checkbox')]));}
   else if(configPage==='Modem/DominoEX'){body.append(fieldset('Receive',[configField('FEC','dominoFec','checkbox'),configField('Filtering','dominoFilter','checkbox'),configField('Filter bandwidth factor','dominoBandwidth','number')]));}
-  else if(configPage==='Modem/FSQ'){body.append(fieldset('Receive',[configField('Speed (baud)','fsqBaud','text',[1.5,2,3,4.5,6].map(v=>[v,v])),configField('FFT moving average','fsqMovingAverage','number'),configField('Minimum detector hits','fsqPeakHits','number')]));body.append(fieldset('Transmit',[configField('MYCALL lower case','fsqLowercase','checkbox',null,true)]),note('Directed commands, automatic replies, and external logging remain disabled.'));}
+  else if(configPage==='Modem/FSQ'){body.append(fieldset('Receive / transmit',[configField('Speed (baud)','fsqBaud','text',[1.5,2,3,4.5,6].map(v=>[v,v])),configField('FFT moving average','fsqMovingAverage','number'),configField('Minimum detector hits','fsqPeakHits','number')]));body.append(fieldset('Transmit',[configField('MYCALL lower case','fsqLowercase','checkbox'),note('Controls the sender callsign in FSQ text and <MYCALL>. Set your callsign under Operator-Station.')]),note('Directed commands, automatic replies, and external logging remain disabled.'));}
   else if(configPage==='Modem/Throb'){body.append(fieldset('Receive',[configField('Lower case','lowercase','checkbox')]));}
   else if(configPage==='Modem/WEFAX'){body.append(fieldset('Receive',[configField('Lines per minute','wefaxLpm','text',[[0,'240'],[1,'120'],[2,'90'],[3,'60']]),note('View → Received picture opens the image. Skip APT / Skip phasing starts reception for recordings without a start sequence. Save downloads a PNG.')]));}
   else if(configPage==='Modem/Olivia'||configPage==='Modem/Contestia'){const prefix=configPage==='Modem/Olivia'?'olivia':'contestia';body.append(fieldset('Receive',[configField('Bandwidth (Hz)',prefix+'Bandwidth','text',[125,250,500,1000,2000].map((v,i)=>[i,v])),configField('Tones',prefix+'Tones','text',[2,4,8,16,32,64].map((v,i)=>[i,v])),configField('Integration',prefix+'Integration','number'),configField('Search margin',prefix+'Margin','number'),...(prefix==='contestia'?[configField('Lower case','lowercase','checkbox')]:[])]));body.append(note('Bandwidth and tones configure the generic mode. Named variants in Op Mode retain their original settings.'));}
   else if(configPage.startsWith('Modem/')){body.append(fieldset('Receive',[configField('AFC','afc','checkbox'),configField('Squelch','sql','checkbox'),configField('Squelch level','squelch','number')]));body.append(note('Select a tone count and bandwidth variant under Op Mode. Additional desktop receive options are not yet exposed for this page.'));}
+  else if(configPage==='Misc/DTMF'){body.append(fieldset('Transmit',[configField('Tone duration (ms)','dtmfToneMs','number'),configField('Digit gap (ms)','dtmfGapMs','number'),note('Sending speed depends on tone duration plus the gap between digits. Defaults: 50 ms each (10 digits/second). Spaces, commas and hyphens insert a pause lasting one tone plus one gap.')]));body.append(fieldset('Receive',[configField('Squelch level','squelch','number'),note('Select DTMF under Op Mode to decode keypad tones. The squelch threshold always applies; receive timing is detected automatically.')]));}
   else if(configPage==='Misc'){body.append(fieldset('Receive',[configField('Lower case','lowercase','checkbox'),configField('Channel squelch','channelSquelch','number'),note('Lower case applies to RTTY, Throb, and Contestia.')]));}
   else{body.append(note('This desktop feature is not implemented in the browser version.'));}
   workflowUI.apply();

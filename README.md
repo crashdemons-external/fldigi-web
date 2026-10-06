@@ -72,6 +72,24 @@ Baudot/ASCII modes reject incompatible character sets; Baudot text becomes upper
 case and DTMF accepts keypad characters and pauses. TxID/RxID, rig control,
 and native application integrations are not implemented.
 
+**Configure → Misc → DTMF** sets the tone duration and gap between keypad
+digits, in milliseconds. Both default to 50 ms (10 digits/second). Spaces,
+commas, and hyphens pause for one tone duration plus one gap. These settings
+apply to WAV generation and realtime TX. The same page exposes the receive
+squelch threshold; select **DTMF** in Op Mode to decode. Receive timing is
+detected automatically.
+
+Transmit configuration is available in encode, both, and full workflows.
+**Operator-Station → Callsign** supplies the FSQ sender header and the
+`<MYCALL>` token in IFKP/FSQ text. Their **MYCALL lower case** options control
+that formatting; FSQ also uses it for image sender headers. Compose the complete
+token before starting realtime TX, or paste it as a whole while appending text.
+**Soundcard → Signal Level** exposes TX volume in encode-only mode, and
+**Colors-Fonts / UI** applies the font, font size, and word wrap to both text
+panes, with a separate transmit color. **Modem → CW → Transmit** includes the
+native WPM setting. FSK hardware keying, QSK, and device sample-rate selection
+still require desktop support.
+
 Choose the UI workflow with `?workflow=encode`, `?workflow=decode`,
 `?workflow=both`, or `?workflow=full`. The default is `both`; unknown values
 also use `both`. `both` enables the union of encoding and decoding controls;

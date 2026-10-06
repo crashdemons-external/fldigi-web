@@ -17,8 +17,10 @@ Shared modem/protocol settings carry both `encode` and `decode`. Shared navigati
 configuration management, waterfall display controls, help, and diagnostics also carry both so those controls
 remain accessible in either workflow. Receiver-specific processing and displays
 carry only `decode`; transmit text, audio generation, and output corrections carry
-only `encode`. Contact and operator callsigns are `rig`, as are MYCALL formatting
-options, FSK hardware keying, CW keying/QSK, Spot, TUNE, RF frequency/bandwidth,
+only `encode`. The operator callsign carries `encode` and `rig` because the
+FSQ encoder uses it as a sender header and IFKP/FSQ text supports `<MYCALL>`.
+Their MYCALL formatting options carry `encode`. Contact identity and the other
+operator logging fields remain `rig`, as do FSK hardware keying, CW keying/QSK, Spot, TUNE, RF frequency/bandwidth,
 QSY, and reception-report websites. RF frequency is separate from audio frequency.
 Microphone capture is `decode`: it needs an audio input, but no radio rig.
 
@@ -44,6 +46,10 @@ Some distinctions are intentional even though the feature is disabled today:
   playback volume are `decode`.
 - CW reference WPM, DominoEX FEC, and MT63 8-bit character handling carry both
   tags, based on their receive/transmit use in the supplied fldigi source.
+- The shared text font, font size, and word wrap carry both tags. Transmit color
+  and volume carry `encode`; Soundcard/Signal Level carries both so TX volume
+  is accessible in encode-only mode. IFKP/FSQ MYCALL options and DTMF tone/gap
+  timing carry `encode`; the DTMF page also contains receive squelch.
 
 IDs already present in `index.html` and `config-<setting key>` IDs are preserved.
 Previously anonymous controls now have stable IDs. Dynamic menu/tree IDs use

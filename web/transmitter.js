@@ -163,6 +163,7 @@ export function createTransmitter({$,enabled,decodeEnabled,workflowUI,getSetting
       const next=$('tx-text').value;
       if(!next.startsWith(current.editorText))throw new Error('Queued text is locked during TX. Append at the end, or finish TX before editing.');
       const normalized=prepareTransmitText(next,current.mode,current.settings);
+      if(!normalized.startsWith(current.text))throw new Error('Queued text is locked during TX. Complete <MYCALL> before starting TX, or paste the whole token at the end.');
       const addition=normalized.slice(current.text.length);current.text=normalized;current.editorText=next;
       if(addition){if(current.started)current.worker.postMessage({type:'append',job:current.id,text:addition});else current.appended+=addition;}
     }catch(error){$('tx-text').value=current.editorText;status(error.message,true);}

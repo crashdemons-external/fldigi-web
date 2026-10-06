@@ -110,6 +110,11 @@ for(const id of Object.keys(workflow))assert.ok(knownIds.has(id),`${id}: catalog
 // Protect the distinctions that disabled/enabled state alone cannot establish.
 for(const id of ['rx-id','kpsql','config-captureRate'])assert.deepEqual(workflow[id],['decode']);
 for(const id of ['tx-id','tx-text','menu-generate-audio'])assert.deepEqual(workflow[id],['encode']);
+for(const id of ['config-dtmfToneMs','config-dtmfGapMs'])assert.deepEqual(workflow[id],['encode']);
+for(const id of ['config-ifkpLowercase','config-fsqLowercase','config-txColor','config-txVolume'])assert.deepEqual(workflow[id],['encode']);
+for(const id of ['config-rxFont','config-rxWrap','config-page-Soundcard%2FSignal%20Level'])assert.deepEqual(workflow[id],['encode','decode']);
+for(const id of ['config-callsign','config-page-Operator-Station','menu-config-operator'])assert.deepEqual(workflow[id],['encode','rig']);
+assert.deepEqual(workflow['config-page-Misc%2FDTMF'],['encode','decode']);
 for(const id of ['contact-call','qsy','config-useFSK','config-qsk'])assert.deepEqual(workflow[id],['rig']);
 for(const id of ['help-command-line','config-portaudio'])assert.deepEqual(workflow[id],['util']);
 for(const id of ['sideband','reverse','config-rttyBaud','config-dominoFec'])assert.deepEqual(workflow[id],['encode','decode']);

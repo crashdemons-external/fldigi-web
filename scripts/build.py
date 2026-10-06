@@ -63,6 +63,7 @@ def main():
     exports += ['_web_flush', '_web_waterfall_geometry', '_web_scope']
     exports += ['_web_tx_supported', '_web_tx_begin', '_web_tx_append', '_web_tx_finish', '_web_tx_step', '_web_tx_buffer', '_web_tx_done', '_web_tx_ended', '_web_tx_cursor', '_web_tx_frequency']
     exports += ['_web_tx_image_supported', '_web_tx_image_begin', '_web_tx_image_progress']
+    exports += ['_web_set_callsign']
     cmd += ['-sMODULARIZE=1', '-sEXPORT_ES6=1', '-sENVIRONMENT=web,worker,node', '-sALLOW_MEMORY_GROWTH=1', '-sINITIAL_MEMORY=33554432', '-sSTACK_SIZE=5242880', '-sEXPORTED_FUNCTIONS=' + json.dumps(exports), '-sEXPORTED_RUNTIME_METHODS=["UTF8ToString","HEAPF32","HEAPU8","HEAPU32"]', '-sFILESYSTEM=0', '-o', str(ROOT / 'web/fldigi-core.js')]
     (ROOT / 'web').mkdir(exist_ok=True)
     print('Building the original fldigi decoder sources with Emscripten...')

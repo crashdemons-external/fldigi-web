@@ -90,6 +90,20 @@ try{
     page.tx.dispose();assert.equal(page.$('tx-audio-bar').hidden,true);
   }
 
+  const calls=ui('encode');calls.setMode({id:99,name:'IFKP',family:'IFKP',enabled:true});
+  calls.settings.callsign='W1TEST';calls.settings.ifkpLowercase=true;
+  calls.$('tx-text').value='DE <MYCALL>';calls.tx.toggle();await settle();const callWorker=workers.at(-1);started(callWorker,true);
+  assert.equal(callWorker.messages.find(m=>m.type==='start').text,'DE w1test');
+  calls.settings.callsign='W2CHANGED';
+  calls.$('tx-text').value+=' <MYCALL>';await calls.$('tx-text').dispatch('input');
+  assert.equal(callWorker.messages.find(m=>m.type==='append').text,' w1test','live callsign macros use the frozen session settings');
+  calls.$('tx-text').value+=' <MYCALL';await calls.$('tx-text').dispatch('input');
+  const queued=calls.$('tx-text').value,queuedCount=callWorker.messages.length;
+  calls.$('tx-text').value+='>';await calls.$('tx-text').dispatch('input');
+  assert.equal(calls.$('tx-text').value,queued,'macro completion cannot rewrite already queued text');
+  assert.equal(callWorker.messages.length,queuedCount);
+  calls.tx.cancel();
+
   const live=ui('encode');live.$('tx-text').value='FIRST\n';live.tx.toggle();await settle();const worker=workers.at(-1);
   // Typing during module initialization cannot duplicate appended text.
   live.$('tx-text').value='FIRST\nSECOND\n';await live.$('tx-text').dispatch('input');

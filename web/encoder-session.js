@@ -17,7 +17,9 @@ export function createEncoderSession(core,send){
       if(!mode||!(data.image?core._web_tx_image_supported(mode.id):core._web_tx_supported(mode.id)))throw new Error('This mode cannot encode the selected input.');
       // Configure before and after construction: some constructors initialize
       // their transmit codec from the upstream configuration defaults.
-      const configure=()=>{for(const [key,index]of Object.entries(options)){
+      const configure=()=>{
+        textCall(core._web_set_callsign,settings.callsign||'');
+        for(const [key,index]of Object.entries(options)){
         if(settings[key]===undefined)continue;
         if([31,32].includes(index)&&mode.name!=='OLIVIA')continue;
         if([35,36].includes(index)&&mode.name!=='CONTESTIA')continue;

@@ -19,6 +19,12 @@ export function wavBlob(chunks,sampleCount,rate){
 export function prepareTransmitText(text,mode,settings){
   if(!mode?.enabled||mode.family==='WEFAX')throw new Error('This mode requires an image; text audio generation is unavailable.');
   let normalized=String(text).replace(/\r\n?/g,'\n');
+  if(['IFKP','FSQ'].includes(mode.family)&&normalized.includes('<MYCALL>')){
+    const callsign=settings.callsign?.trim();
+    if(!callsign)throw new Error('Set your callsign under Configure → Operator-Station before using <MYCALL>.');
+    const lowercase=mode.family==='IFKP'?settings.ifkpLowercase:settings.fsqLowercase;
+    normalized=normalized.replaceAll('<MYCALL>',lowercase?callsign.toLowerCase():callsign.toUpperCase());
+  }
   if(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(normalized))throw new Error('Remove control characters from the transmit text.');
   normalized=normalized.replace(/\t/g,'    ');
   const asciiOnly=['CW','Throb','Contestia','IFKP','FSQ','NAVTEX'].includes(mode.family)||mode.family==='RTTY'&&settings.rttyBits!==2||mode.family==='MT63'&&!settings.mt638bit;
