@@ -3,6 +3,7 @@ export const defaults = {
   channelSquelch:-3, showChannels:true, showScope:true, reference:-20, span:70, magnification:1, speed:'NORM',
   callsign:'', operatorName:'', qth:'', locator:'', rxFont:'Courier New', rxFontSize:14, rxColor:'#fff3bd', txColor:'#c4ebfc', rxWrap:true,
   inputDevice:'default', channel:'left', rxPpm:0, inputGain:0, playbackVolume:0.5,
+  txVolume:0.5,txPpm:0,txOffset:0,txFrequencyLock:false,txFrequency:1500,
   rttyShift:3, rttyBaud:1, rttyBits:0, rttyParity:0, rttyStop:1, lowercase:false,
   lowCutoff:0,highCutoff:4000,cwSpeed:18,cwBandwidth:150,cwTrack:true,cwMatched:false,cwRange:10,cwMin:5,cwMax:50,cwFilter:2,cwSom:false,
   hellAgc:2,hellWidth:2,hellHeight:20,hellBandwidth:245,hellBlackboard:false,fsqBaud:4.5,ifkpBaud:1,ifkpLowercase:true,
@@ -25,6 +26,8 @@ export function validatedConfig(candidate) {
   result.channelSquelch=Math.round(Math.max(-3,Math.min(6,result.channelSquelch))*10)/10;
   result.rxPpm=Math.max(-5000,Math.min(5000,result.rxPpm));result.inputGain=Math.max(-40,Math.min(40,result.inputGain));
   result.playbackVolume=Math.max(0,Math.min(1,result.playbackVolume));
+  result.txVolume=Math.max(0,Math.min(1,result.txVolume));result.txPpm=Math.max(-5000,Math.min(5000,result.txPpm));
+  result.txOffset=Math.max(-500,Math.min(500,result.txOffset));result.txFrequency=Math.max(0,Math.min(4000,result.txFrequency));
   if(!['left','right','mix'].includes(result.channel))result.channel='left';
   if(!['USB','LSB'].includes(result.sideband))result.sideband='USB';
   if(!['NORM','FAST','SLOW'].includes(result.speed))result.speed='NORM';

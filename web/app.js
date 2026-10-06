@@ -4,6 +4,7 @@ import {defaults, validatedConfig, storageKey} from './configuration.js';
 import {appendReceivedText} from './received-text.js';
 import {createScope} from './scope.js';
 import {createWorkflowFilter,parseWorkflow} from './workflow.js';
+import {createTransmitter} from './transmitter.js';
 
 const $ = id => document.getElementById(id);
 const workflow=parseWorkflow(window.location.search);
@@ -30,11 +31,11 @@ const workflowMode=mode=>selectableMode(mode)&&workflowUI.allows(controlId('mode
 // Intentional UI-only deviation from the fldigi source label: make Morse explicit.
 const displayModeName=mode=>mode.name==='CW'?'CW (morse)':mode.label;
 const dtmfSelected=()=>settings.modeName==='DTMF';
-let settings;
+let settings,transmitter;
 try{settings=validatedConfig(JSON.parse(localStorage.getItem(storageKey)));}catch{settings={...defaults};}
 let workerReady=false,modes=[],audioContext,audioSetup,stream,liveSource,liveWorklet,liveGain,fileSource,fileWorklet,fileGain;
 let configureSequence=0,configuredMode,audioGeneration=0,activeInput='none',captureDeviceSelection;
-let live=false,openingLive=false,sourceGeneration=0,fileUrl,waterfallPaused=false,displayMode='WF',latestSpectrum,latestRate=8000,latestBandwidth=31.25,waterfallRows=0;
+let live=false,openingLive=false,resumeMicAfterTx=false,sourceGeneration=0,fileUrl,waterfallPaused=false,displayMode='WF',latestSpectrum,latestRate=8000,latestBandwidth=31.25,waterfallRows=0;
 let latestGeometry={bands:[[-41,41]],tracks:[-15,15],hover:[-15,15],markerEdges:[-41,41]};
 let waterfallOffset=0,displayMagnification=1,hoverPointer,cursorHideTimer;
 let configDraft,configPage='Soundcard/Devices',devices=[];
@@ -83,8 +84,10 @@ function applySettings(persist=true){
   $('window-title').textContent=workflow==='decode'?'fldigi - NO CALLSIGN SET (receive-only alpha)':`fldigi - NO CALLSIGN SET (${workflow} workflow)`;
   document.title=$('window-title').textContent;
   $('tx-text').setAttribute('aria-label',encodeEnabled?'Transmit text':'Transmit text (disabled)');
-  $('tx-text').title=encodeEnabled?'Text to encode; audio generation is not implemented yet':'Transmission is disabled in this receive version';
+  $('tx-text').title=encodeEnabled?'Compose text for TX generate or realtime playback. During TX, append text at the end; T/R finishes the session.':'Transmission is disabled in this receive version';
   $('source-indicator').textContent=decodeEnabled?(live?'LIVE':fileUrl?'FILE':'RX'):'TX';
+  $('frequency-lock').setAttribute('aria-pressed',String(settings.txFrequencyLock));
+  $('frequency-lock').title=settings.txFrequencyLock?`TX frequency locked at ${settings.txFrequency} Hz`:'Lock TX frequency while tuning receive';
   $('sideband').value=settings.sideband;
   $('sideband').setAttribute('aria-label',decodeEnabled?'Receive sideband':'Transmit sideband');
   $('sideband').title='Sideband of the audio signal; changes modem polarity';
@@ -107,10 +110,10 @@ function applySettings(persist=true){
   for(const node of [liveWorklet,fileWorklet])node?.port.postMessage({channel:settings.channel,generation:audioGeneration});
   if(fileGain)fileGain.gain.value=$('file-mute').getAttribute('aria-pressed')==='true'?0:settings.playbackVolume;
   if(displayMagnification!==settings.magnification){displayMagnification=settings.magnification;waterfallOffset=Math.max(0,Math.min(4000-4000/displayMagnification,settings.frequency-2000/displayMagnification));}
-  configureDecoder();resizeCanvases();updateTuningCursor();if(persist)saveSettings();
+  transmitter?.update();configureDecoder();resizeCanvases();updateTuningCursor();if(persist)saveSettings();
   if((live||openingLive)&&captureDeviceSelection!==settings.inputDevice){stopLive();startLive();}
 }
-function tune(frequency){if(dtmfSelected()||!Number.isFinite(Number(frequency)))return;settings.frequency=clampTuningFrequency(Number(frequency),latestBandwidth,settings.lowCutoff,settings.highCutoff);$('frequency').value=Math.round(settings.frequency);$('frequency-top').value=Math.round(settings.frequency);configureDecoder(true);updateTuningCursor();saveSettings();}
+function tune(frequency){if(transmitter?.active||dtmfSelected()||!Number.isFinite(Number(frequency)))return;settings.frequency=clampTuningFrequency(Number(frequency),latestBandwidth,settings.lowCutoff,settings.highCutoff);$('frequency').value=Math.round(settings.frequency);$('frequency-top').value=Math.round(settings.frequency);configureDecoder(true);updateTuningCursor();saveSettings();}
 let hoverOpenedMenu;
 function closeBranches(root=document){root.querySelectorAll('.submenu-open').forEach(branch=>{branch.classList.remove('submenu-open');branch.querySelector('.submenu-heading').setAttribute('aria-expanded','false');});}
 function closeMenus(){closeBranches();hoverOpenedMenu=undefined;document.querySelectorAll('.menu.open').forEach(menu=>{menu.classList.remove('open');menu.querySelector('.menu-heading').setAttribute('aria-expanded','false');});}
@@ -174,13 +177,13 @@ function buildModeMenu(){
   bindMenuBranches($('mode-options'));
   workflowUI.apply();
 }
-function selectMode(mode){if(!workflowMode(mode))return;settings.modeName=mode.name;settings.mode=mode.id;applySettings();closeMenus();status(`${displayModeName(mode)} · ${decodeEnabled?(live?'Live audio':fileUrl?'Audio file ready':'Receiver ready'):'Audio generation is not implemented yet'}`);}
+function selectMode(mode){if(transmitter?.active||!workflowMode(mode))return;settings.modeName=mode.name;settings.mode=mode.id;applySettings();closeMenus();status(`${displayModeName(mode)} · ${decodeEnabled?(live?'Live audio':fileUrl?'Audio file ready':'Receiver ready'):'Encoder ready'}`);}
 const channelRows=Array.from({length:30},(_,index)=>{const row=document.createElement('div');row.id=controlId('channel-row',index+1);row.className='channel-row';const f=document.createElement('span');f.className='channel-frequency';const text=document.createElement('span');row.append(f,text);row.addEventListener('click',()=>{if(row.dataset.frequency)tune(row.dataset.frequency);});$('channel-list').append(row);return row;});
 const worker=new Worker(new URL('./decoder-worker.js',import.meta.url),{type:'module'});
 worker.onerror=event=>{status('Decoder failed to start. Run the Emscripten build and serve this page over localhost or HTTPS.',true);console.error(event.message);};
 worker.onmessage=({data})=>{
   if(data.generation!==undefined&&data.generation!==audioGeneration)return;
-  if(data.type==='ready'){workerReady=true;modes=data.modes;const mode=modes.find(m=>m.name===settings.modeName&&workflowMode(m))||modes.find(m=>m.name==='BPSK31');settings.modeName=mode.name;settings.mode=mode.id;buildModeMenu();applySettings();status(decodeEnabled?'Receiver ready · File → Audio → Playback, or Rx for mic capture':'Encode workflow · Audio generation is not implemented yet');}
+  if(data.type==='ready'){workerReady=true;modes=data.modes;const mode=modes.find(m=>m.name===settings.modeName&&workflowMode(m))||modes.find(m=>m.name==='BPSK31');settings.modeName=mode.name;settings.mode=mode.id;buildModeMenu();applySettings();status(decodeEnabled?'Receiver ready · File → Audio → Playback, or Rx for mic capture':'Encoder ready · Type text, then TX generate or T/R for realtime playback');}
   else if(data.type==='error'){status(data.message,true);}
   else if(!decodeEnabled)return;
   else if(data.type==='configured'){if(data.sequence!==configureSequence)return;latestRate=data.rate;latestBandwidth=data.bandwidth;latestGeometry=data.geometry;scopeDisplay.update(data.scope);settings.frequency=data.frequency;syncFrequencyInputs();$('status1').textContent=data.status1||'';$('status2').textContent=data.status2||'';updateTuningCursor();if(data.imageWidth&&data.imageSerial!==pictureSerial){drawPicture({...data,imageUpdates:new Uint32Array(0)},false);}}
@@ -235,12 +238,30 @@ function connectInput(input,isFile){
   return {worklet,gain};
 }
 function stopLive(){
-  const wasCapturing=live||openingLive;sourceGeneration++;openingLive=false;
+  const wasCapturing=live||openingLive;sourceGeneration++;openingLive=false;resumeMicAfterTx=false;
   if(wasCapturing)resetAudioPipeline('none');
-  stream?.getTracks().forEach(track=>track.stop());stream=undefined;liveSource?.disconnect();liveWorklet?.disconnect();liveGain?.disconnect();liveSource=liveWorklet=liveGain=undefined;live=false;document.body.classList.remove('live');$('rx-button').setAttribute('aria-pressed','false');$('source-indicator').textContent=fileUrl?'FILE':'RX';
+  stream?.getTracks().forEach(track=>track.stop());stream=undefined;liveSource?.disconnect();liveWorklet?.disconnect();liveGain?.disconnect();liveSource=liveWorklet=liveGain=undefined;live=false;document.body.classList.remove('live');$('rx-button').setAttribute('aria-pressed','false');$('source-indicator').textContent=transmitter?.active?'TX':fileUrl?'FILE':'RX';
+}
+function pauseReceiveInput(kind){
+  if(kind==='live'&&decodeEnabled&&live&&stream&&liveWorklet){
+    // Keep the acquired stream and graph; only the receive worklet is paused.
+    resumeMicAfterTx=true;document.body.classList.remove('live');$('rx-button').setAttribute('aria-pressed','false');
+  }else stopLive();
+  audio.pause();resetAudioPipeline('none');
+}
+function resumeReceiveInput(){
+  if(!resumeMicAfterTx)return false;
+  resumeMicAfterTx=false;
+  if(!decodeEnabled||!live||!liveWorklet||!stream?.getAudioTracks().some(track=>track.readyState==='live')||audioContext.state==='closed'){
+    stopLive();return false;
+  }
+  resetAudioPipeline('live');configureDecoder(true);
+  document.body.classList.add('live');$('rx-button').setAttribute('aria-pressed','true');$('source-indicator').textContent='LIVE';
+  return true;
 }
 async function startLive(){
   if(!decodeEnabled)return;
+  if(transmitter?.active){transmitter.finish();return;}
   if(live||openingLive){stopLive();status('Live audio stopped');return;}
   try{ensureReady();ensureMicrophoneAccess();}catch(error){status(error.message,true);return;}
   const generation=++sourceGeneration;openingLive=true;captureDeviceSelection=settings.inputDevice;
@@ -261,15 +282,15 @@ async function startLive(){
 }
 async function loadFile(file){
   if(!decodeEnabled)return;
-  try{ensureReady();stopLive();resetAudioPipeline('none');audio.pause();if(fileUrl)URL.revokeObjectURL(fileUrl);fileUrl=URL.createObjectURL(file);audio.src=fileUrl;$('file-name').textContent=file.name;$('file-name').title=file.name;$('playback-bar').hidden=false;$('source-indicator').textContent='FILE';syncPlaybackButton();
+  try{ensureReady();transmitter?.cancel(false);stopLive();resetAudioPipeline('none');audio.pause();if(fileUrl)URL.revokeObjectURL(fileUrl);fileUrl=URL.createObjectURL(file);audio.src=fileUrl;$('file-name').textContent=file.name;$('file-name').title=file.name;$('playback-bar').hidden=false;$('source-indicator').textContent='FILE';syncPlaybackButton();
     const selectedUrl=fileUrl;await context();if(fileUrl!==selectedUrl)return;if(!fileSource){fileSource=audioContext.createMediaElementSource(audio);({worklet:fileWorklet,gain:fileGain}=connectInput(fileSource,true));}if(audio.paused)status(`${file.name} · Press ▶ to play and decode`);}
   catch(error){status(error.message,true);}
 }
 async function togglePlayback(){
   if(!decodeEnabled)return;
-  if(!fileUrl||live||openingLive)return;
+  if(!fileUrl||live||openingLive||transmitter?.active)return;
   const selectedUrl=fileUrl;
-  try{ensureReady();await context();if(fileUrl!==selectedUrl||live||openingLive)return;if(audio.paused)await audio.play();else audio.pause();}
+  try{ensureReady();await context();if(fileUrl!==selectedUrl||live||openingLive||transmitter?.active)return;if(audio.paused)await audio.play();else audio.pause();}
   catch(error){if(fileUrl===selectedUrl&&!live&&!openingLive)status(error.message,true);}
 }
 function closeFile(){
@@ -277,11 +298,11 @@ function closeFile(){
   const previousUrl=fileUrl;fileUrl=undefined;audio.pause();audio.removeAttribute('src');audio.load();if(previousUrl)URL.revokeObjectURL(previousUrl);
   $('playback-bar').hidden=true;$('file-name').textContent=$('file-name').title='';$('file-position').value=0;$('file-time').textContent='0:00 / 0:00';$('source-indicator').textContent=live?'LIVE':'RX';syncPlaybackButton();
 }
-function stopAudio(){if(!decodeEnabled)return;stopLive();resetAudioPipeline('none');audio.pause();if(fileUrl&&audio.currentTime!==0)audio.currentTime=0;status('Audio stopped');}
+function stopAudio(){transmitter?.cancel();if(!decodeEnabled)return;stopLive();resetAudioPipeline('none');audio.pause();if(fileUrl&&audio.currentTime!==0)audio.currentTime=0;status('Audio stopped');}
 function formatTime(seconds){if(!Number.isFinite(seconds))return '0:00';return Math.floor(seconds/60)+':'+String(Math.floor(seconds%60)).padStart(2,'0');}
 function syncPlaybackButton(){const playing=!audio.paused&&!audio.ended;$('play-file').textContent=playing?'Ⅱ':'▶';$('play-file').setAttribute('aria-label',playing?'Pause playback':'Play audio file');$('play-file').title=playing?'Pause playback':'Play audio file';}
 for(const eventName of ['play','pause','ended','emptied'])audio.addEventListener(eventName,syncPlaybackButton);
-audio.addEventListener('play',()=>{if(!decodeEnabled||!fileUrl||live||openingLive){audio.pause();return;}if(activeInput!=='file')resetAudioPipeline('file');fileWorklet?.port.postMessage({active:!audio.seeking,generation:audioGeneration});$('source-indicator').textContent='FILE';status('Playing and decoding: '+$('file-name').textContent);});
+audio.addEventListener('play',()=>{if(!decodeEnabled||!fileUrl||live||openingLive||transmitter?.active){audio.pause();return;}if(activeInput!=='file')resetAudioPipeline('file');fileWorklet?.port.postMessage({active:!audio.seeking,generation:audioGeneration});$('source-indicator').textContent='FILE';status('Playing and decoding: '+$('file-name').textContent);});
 audio.addEventListener('pause',()=>{if(!audio.paused||activeInput!=='file'||audio.seeking)return;fileWorklet?.port.postMessage({command:'flush',generation:audioGeneration});if(fileUrl)status('Audio playback paused');});
 audio.addEventListener('timeupdate',()=>{$('file-position').value=Number.isFinite(audio.duration)?audio.currentTime/audio.duration*1000:0;$('file-time').textContent=formatTime(audio.currentTime)+' / '+formatTime(audio.duration);});
 audio.addEventListener('loadedmetadata',()=>{$('file-time').textContent='0:00 / '+formatTime(audio.duration);});
@@ -298,8 +319,8 @@ function setSpeakerIcon(muted){
 }
 $('file-mute').addEventListener('click',()=>{const muted=$('file-mute').getAttribute('aria-pressed')!=='true';$('file-mute').setAttribute('aria-pressed',String(muted));setSpeakerIcon(muted);if(fileGain)fileGain.gain.value=muted?0:settings.playbackVolume;});
 $('close-file').addEventListener('click',()=>{closeFile();status(live?'Live audio capture active':'Receiver ready');});
-$('rx-button').addEventListener('click',startLive);$('source-indicator').addEventListener('click',()=>decodeEnabled?(fileUrl?togglePlayback():startLive()):generateAudio());
-function generateAudio(){if(encodeEnabled)showMessage('Generate audio','Audio generation and file export are not implemented yet. You can prepare transmit text and modem settings in this workflow.');}
+$('rx-button').addEventListener('click',()=>transmitter?.active?transmitter.finish():startLive());$('source-indicator').addEventListener('click',()=>transmitter?.active?transmitter.finish():decodeEnabled?(fileUrl?togglePlayback():startLive()):transmitter?.toggle());
+function generateAudio(){if(encodeEnabled)transmitter?.generate();}
 function download(name,data,type){const url=URL.createObjectURL(new Blob([data],{type}));const link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);status('Download requested: '+name);}
 function drawRaster(columns,height){
   const width=Math.max(1,Math.floor(rasterCanvas.clientWidth));const ctx=rasterCanvas.getContext('2d');
@@ -332,7 +353,7 @@ async function showAudioInfo(){
 async function showBuildInfo(){
   try{
     const response=await fetch(new URL('./build-info.json',import.meta.url));if(!response.ok)throw new Error('Build metadata is unavailable. Rebuild with scripts/build.py.');const info=await response.json();
-    showMessage('Build info',`fldigi ${info.fldigiVersion} · Browser receive port\n${info.compiler}\n${info.optimization}\nBuilt: ${info.builtAt}\nEnabled receive modes: ${modes.filter(mode=>mode.enabled).length}\n\nOriginal source archive SHA-256:\n${info.sourceArchiveSha256}\n\nWASM SHA-256:\n${info.wasmSha256}\n\nAudio processing: Web Audio / AudioWorklet\nDecoder: original C++ compiled to WebAssembly\nIcons: original fldigi artwork and Font Awesome Free 7.2.0\nFrontend package dependencies: none`);
+    showMessage('Build info',`fldigi ${info.fldigiVersion} · Browser audio port\n${info.compiler}\n${info.optimization}\nBuilt: ${info.builtAt}\nEnabled receive modes: ${modes.filter(mode=>mode.enabled).length}\n\nOriginal source archive SHA-256:\n${info.sourceArchiveSha256}\n\nWASM SHA-256:\n${info.wasmSha256}\n\nAudio processing: Web Audio / AudioWorklet\nDecoder: original C++ compiled to WebAssembly\nIcons: original fldigi artwork and Font Awesome Free 7.2.0\nFrontend package dependencies: none`);
   }catch(error){showMessage('Build info',error.message);}
 }
 const actions={
@@ -347,8 +368,8 @@ const actions={
   'clear-channels':()=>{postDecoder({type:'clear-channels'});channelRows.forEach(row=>{row.children[0].textContent=row.children[1].textContent='';});},
   'audio-info':showAudioInfo,'build-info':showBuildInfo,
   'event-log':()=>showMessage('Event log',eventLog.map(entry=>`${entry.time}  ${entry.error?'ERROR':'INFO'}  ${entry.message}`).join('\n')||'No events recorded in this session.','fldigi-event-log.txt'),
-  help:()=>showMessage('fldigi browser receiver','Use File → Audio → Playback (load audio file) to select a recording, then press ▶. Choose RX capture (use mic), click Rx, or press F3 for live microphone or audio-device input. Starting mic capture closes the loaded recording; loading a recording stops mic capture. Choose ?workflow=encode, ?workflow=both, or ?workflow=full to enable transmit controls. Audio generation and file export are not implemented yet.\n\nSelect the signal mode under Op Mode, then click a signal in the waterfall to tune. AFC follows frequency drift. SQL suppresses output below the selected signal threshold.\n\nDTMF is at the bottom of Op Mode, below the separator. It exclusively decodes keypad tones using fixed audio frequencies; tuning is inactive. The squelch threshold always applies. Switching modes disables DTMF.\n\nConfigure → Sound card chooses the input channel, input device, gain, and sample-rate correction. Configuration is saved in this browser. File exports download a file; imports use a file picker.\n\nCapture requires HTTPS or localhost. Audio remains on this computer. Audio generation, rig control, and external application connections are not implemented. Decoder state resets when seeking in a recording.'),
-  about:()=>showMessage('About fldigi','fldigi 4.2.13-alpha0 · Browser receive port\n\nOriginal fldigi modem and DSP sources by Dave Freese, W1HKJ, and the fldigi contributors. Compiled with Emscripten.\n\nGNU GPL version 3 or later. Corresponding source and build scripts are included in this project. See COPYING and THIRD_PARTY_NOTICES.md.\n\nThis version supports microphone input and local audio-file playback in decode, both, and full workflows. Workflow tags control UI availability. Planned audio-generation and desktop features remain unimplemented.\n\nIcons: original fldigi artwork and Font Awesome Free 7.2.0 by Fonticons, Inc. (CC BY 4.0). See THIRD_PARTY_NOTICES.md and icons/fontawesome/LICENSE.txt for the icon notices.'),
+  help:()=>showMessage('fldigi browser audio','Use File → Audio → Playback (load audio file) to select a recording, then press ▶. Choose RX capture (use mic), click Rx, or press F3 for live microphone or audio-device input. Starting mic capture closes the loaded recording; loading a recording stops mic capture. Choose ?workflow=encode, ?workflow=both, or ?workflow=full to enable transmit controls. Compose text in the TX pane. File → Audio → TX generate renders and downloads a complete WAV file. T/R or Tx plays realtime modem audio; append text while transmitting, then T/R or Rx finishes the queued message and modem tail. If microphone receive was active, its stream stays open during TX and receive resumes after the tail without another permission request. ■ or File → Audio → Stop audio stops immediately, releases microphone access, and leaves receive off.\n\nSelect the signal mode under Op Mode, then click a signal in the waterfall to tune. AFC follows frequency drift. SQL suppresses output below the selected signal threshold.\n\nDTMF is at the bottom of Op Mode, below the separator. It decodes and generates keypad tones at fixed audio frequencies; tuning is inactive. The squelch threshold always applies. Switching modes disables DTMF.\n\nConfigure → Sound card chooses the input channel, input device, gain, and sample-rate correction. Configuration is saved in this browser. File exports download a file; imports use a file picker.\n\nCapture requires HTTPS or localhost. Audio remains on this computer. Audio generation is available for text modes and DTMF. WEFAX image generation, rig control, TxID/RxID, and external application connections remain unavailable. Decoder state resets when seeking in a recording.'),
+  about:()=>showMessage('About fldigi','fldigi 4.2.13-alpha3 · Browser audio port\n\nOriginal fldigi modem and DSP sources by Dave Freese, W1HKJ, and the fldigi contributors. Compiled with Emscripten.\n\nGNU GPL version 3 or later. Corresponding source and build scripts are included in this project. See COPYING and THIRD_PARTY_NOTICES.md.\n\nThis version supports microphone input and local audio-file playback in decode, both, and full workflows. Workflow tags control UI availability. Encode, both, and full workflows support WAV rendering and realtime TX playback. Desktop hardware integrations remain unavailable.\n\nIcons: original fldigi artwork and Font Awesome Free 7.2.0 by Fonticons, Inc. (CC BY 4.0). See THIRD_PARTY_NOTICES.md and icons/fontawesome/LICENSE.txt for the icon notices.'),
 };
 document.querySelectorAll('[data-action]').forEach(button=>button.addEventListener('click',()=>{closeMenus();actions[button.dataset.action]?.();}));
 document.querySelectorAll('[data-close-dialog]').forEach(button=>button.addEventListener('click',()=>$(button.dataset.closeDialog).close()));
@@ -465,7 +486,7 @@ function configField(label,key,type='text',options,disabled=false){
   if(options){input=document.createElement('select');for(const [value,label]of options){const option=document.createElement('option');option.value=value;option.textContent=label;input.append(option);}}
   else{input=document.createElement('input');input.type=type;}
   input.id='config-'+key;input.disabled=disabled;row.classList.toggle('unavailable',disabled);if(type==='checkbox')input.checked=Boolean(configDraft[key]);else input.value=configDraft[key]??'';
-  const bounds={channelSquelch:[-3,6,.1],rttyCustomShift:[1,2000,1],pskSearchRange:[10,500,10],dominoBandwidth:[1,2,.1],fsqMovingAverage:[1,15,1],fsqPeakHits:[3,6,1],wfLatency:[1,16,1],playbackVolume:[0,1,.05]}[key];
+  const bounds={channelSquelch:[-3,6,.1],rttyCustomShift:[1,2000,1],pskSearchRange:[10,500,10],dominoBandwidth:[1,2,.1],fsqMovingAverage:[1,15,1],fsqPeakHits:[3,6,1],wfLatency:[1,16,1],playbackVolume:[0,1,.05],txVolume:[0,1,.05],txPpm:[-5000,5000,1],txOffset:[-500,500,1]}[key];
   if(type==='number'){input.step='any';if(bounds)[input.min,input.max,input.step]=bounds.map(String);}
   const readValue=()=>{configDraft[key]=type==='checkbox'?input.checked:typeof defaults[key]==='number'?Number(input.value):input.value;};input.addEventListener('input',readValue);input.addEventListener('change',readValue);row.append(input);return row;
 }
@@ -480,8 +501,8 @@ function renderConfigPage(){
     const unsupported=fieldset('Desktop audio backends',[configField('OSS','oss','checkbox',null,true),configField('PortAudio','portaudio','checkbox',null,true),configField('PulseAudio','pulseaudio','checkbox',null,true)]);body.append(unsupported);
     const refresh=document.createElement('button');refresh.id='refresh-audio-devices';refresh.textContent='Refresh devices';refresh.addEventListener('click',refreshDevices);body.append(refresh,note('Browser audio is processed locally by the fldigi receiver.'));
   }else if(configPage==='Soundcard/Right channel'){body.append(fieldset('Receive channel',[configField('Signal channel','channel','text',[['left','Left channel'],['right','Right channel'],['mix','Mix both channels']])]));}
-  else if(configPage==='Soundcard/Settings'){body.append(fieldset('Sample rate',[configField('Capture','captureRate','text',[['native','Native']],true),configField('Playback','playbackRate','text',[['native','Native']],true),note('Band-limited converter → original modem sample rate')]));body.append(fieldset('Corrections',[configField('RX ppm','rxPpm','number'),configField('TX ppm','txPpm','number',null,true),configField('TX offset','txOffset','number',null,true)]));}
-  else if(configPage==='Soundcard/Signal Level'){body.append(fieldset('Signal level',[configField('Receive gain (dB)','inputGain','number'),configField('Playback volume','playbackVolume','number'),note('Receive gain affects decoding. Playback volume affects the speakers.')]));}
+  else if(configPage==='Soundcard/Settings'){body.append(fieldset('Sample rate',[configField('Capture','captureRate','text',[['native','Native']],true),configField('Playback','playbackRate','text',[['native','Native']],true),note('Band-limited converter → original modem sample rate')]));body.append(fieldset('Corrections',[configField('RX ppm','rxPpm','number'),configField('TX ppm','txPpm','number'),configField('TX offset (Hz)','txOffset','number')]));}
+  else if(configPage==='Soundcard/Signal Level'){body.append(fieldset('Signal level',[configField('Receive gain (dB)','inputGain','number'),configField('Playback volume','playbackVolume','number'),configField('TX volume','txVolume','number'),note('TX volume affects realtime speaker playback. WAV export keeps the original modem amplitude.')]));}
   else if(configPage==='Waterfall'){
     body.append(fieldset('Display',[configField('Reference level','reference','number'),configField('Amplitude span','span','number'),configField('Magnification','magnification','number'),configField('Speed','speed','text',[['FAST','FAST'],['NORM','NORM'],['SLOW','SLOW']]),configField('Docked scope','showScope','checkbox')]));
     body.append(fieldset('Cursor',[configField('Cursor lines','useCursorLines','checkbox'),configField('Center line','useCursorCenterLine','checkbox'),configField('Wide cursor','useWideCursor','checkbox'),configField('Wide center line','useWideCenter','checkbox')]));
@@ -519,5 +540,11 @@ document.addEventListener('keydown',event=>{
   if(event.altKey&&event.key.toLowerCase()==='c'){event.preventDefault();openConfig();}
   if(event.code==='Space'&&!event.target.matches('input,textarea,select,button')&&!$('configuration').open&&fileUrl){event.preventDefault();togglePlayback();}
 });
-window.addEventListener('beforeunload',()=>{stream?.getTracks().forEach(track=>track.stop());if(fileUrl)URL.revokeObjectURL(fileUrl);});
+window.addEventListener('beforeunload',()=>{transmitter?.dispose();stream?.getTracks().forEach(track=>track.stop());if(fileUrl)URL.revokeObjectURL(fileUrl);});
+transmitter=createTransmitter({$,enabled:encodeEnabled,decodeEnabled,workflowUI,getSettings:()=>settings,getMode:()=>modes.find(mode=>mode.id===settings.mode),context,status,download,showMessage,
+  pauseInput:pauseReceiveInput,resumeInput:resumeReceiveInput,stopInput:stopLive,
+  onSpectrum(spectrum,rate){latestSpectrum=spectrum;latestRate=rate;drawWaterfall();},
+  onState(state){if(state==='live')$('source-indicator').textContent='TX';else $('source-indicator').textContent=decodeEnabled?(live?'LIVE':fileUrl?'FILE':'RX'):'TX';},
+});
+$('frequency-lock').addEventListener('click',()=>{if(!encodeEnabled||transmitter.active)return;settings.txFrequencyLock=!settings.txFrequencyLock;if(settings.txFrequencyLock)settings.txFrequency=settings.frequency;applySettings();});
 applySettings(false);

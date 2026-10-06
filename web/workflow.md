@@ -9,12 +9,12 @@ Use `document.getElementById(id)` to resolve an entry. No dependencies are neede
 | Tag | Intended use |
 | --- | --- |
 | `decode` | Decode recordings or microphone audio, including receiving text/images, tuning, signal inspection, and saving results. |
-| `encode` | Generate audio from data for eventual file export. These tags describe planned use; encoding remains unimplemented. |
+| `encode` | Render and download transmit text as WAV, or play a realtime transmit session through the speakers. |
 | `rig` | Radio hardware, on-air operation, station/contact identity, directed callsign features, contesting, or QSO logging. |
 | `util` | Other currently disabled optional features: native audio backends, command-line options, web integrations, autostart, and the unassigned macro slot. |
 
 Shared modem/protocol settings carry both `encode` and `decode`. Shared navigation,
-configuration management, help, and diagnostics also carry both so those controls
+configuration management, waterfall display controls, help, and diagnostics also carry both so those controls
 remain accessible in either workflow. Receiver-specific processing and displays
 carry only `decode`; transmit text, audio generation, and output corrections carry
 only `encode`. Contact and operator callsigns are `rig`, as are MYCALL formatting
@@ -30,7 +30,9 @@ Some distinctions are intentional even though the feature is disabled today:
 - KPSQL and capture sample-rate selection are `decode`; their disabled states do
   not make them utilities.
 - T/R switches and Tx macros carry only `encode`, so they are enabled in the
-  encode, both, and full workflows and disabled in decode. The shipped CQ, ANS,
+  encode, both, and full workflows and disabled in decode. Rx carries both tags:
+  it finishes an active TX session without requesting microphone permission.
+  In encode-only it is disabled while no TX session is active. The shipped CQ, ANS,
   QSO, KN, SK, Me/Qth, and Brag macros are intended for on-air contacts and carry
   `rig`. The empty macro slot is `util` until it has an assigned purpose.
 - Transmit frequency lock carries both tags because it relates receive and
@@ -74,7 +76,8 @@ from the URL's `workflow` query argument:
 Missing or unknown values select `decode`. Matching controls are enabled even if
 they were disabled in the original receive-only UI; this includes RxID, KPSQL,
 Store, and planned transmit/rig controls. Enabling a control does not implement
-its underlying feature. Audio generation and rig operations remain unimplemented.
+its underlying feature. Text audio generation and realtime TX are implemented;
+rig operations and other native integrations remain unimplemented.
 The status message is shared between encoding and decoding because both need
 configuration and error feedback.
 
@@ -90,13 +93,40 @@ Encode-only blocks microphone requests, audio-file loading/playback, audio and
 configuration messages to the decoder, decoded reports, and receive keyboard
 shortcuts. The worker loads the modem list for shared mode selection; it receives
 no decoding requests. The transmit editor accepts text and uses the configured
-fldigi transmit background color. Generating audio shows a message explaining
-that audio generation and export are not implemented yet.
+fldigi transmit background color. TX generate reviews the current settings and
+renders a finite WAV in a separate encoder worker, then downloads it automatically.
+An empty transmit editor shows a warning instead of the generation dialog. The
+dialog and its progress controls are tagged `encode`. T/R and Tx start
+realtime speaker playback; Rx or T/R finishes queued text and the modem tail.
+Immediate stop terminates the worker and scheduled audio. Native FSQ and NAVTEX
+finish their framed message when the encoder returns. Realtime playback retains
+only a short playback queue and does not accumulate a recording.
+The encoder's native FFT feeds the waterfall on the playback clock, independently
+of speaker volume. Its queued display frames are discarded on immediate stop.
+This also works in encode-only without sending audio to the receiver worker.
+
+TX controls also have runtime restrictions: WEFAX requires image input and cannot
+generate text audio; during TX, mode/settings controls are locked, render captures
+the editor, and live TX permits appending at its end. WAV generation adds no
+media player or result toolbar. Realtime TX pauses the receiver's file and holds
+an active microphone stream with receive processing paused. Once queued TX audio
+and its tail have played, microphone receive resumes on the same stream and
+worklet, with a fresh input generation. Explicit Stop releases capture and clears
+the resume intent; device disconnection or loading a recording also clears it.
+TX never acquires a microphone by itself or resumes a received-file recording.
+WAV generation stops microphone capture. Canceling
+or failing a render does not download a partial file.
 
 `node tests/workflow.test.mjs` checks tag validity, stable and unique identifiers,
 complete static-control coverage, every configuration page, generated modem
 menus/presets and channel rows, and catalog entries without a UI counterpart.
 `node tests/workflow-filter.test.mjs` checks profile selection, the full tag union,
 runtime restrictions, dynamic replacement, and disabled event handling. The audio
-source tests also verify encode-only decoder isolation. The static-site packager
+source tests also verify microphone handoff, stop/disconnection handling, and
+encode-only decoder isolation. `encoder.test.mjs` verifies
+all 159 selectable encoder variants, native decoding round-trips, idle/finish,
+chunk continuity, tuning offset, native TX/RX FFT agreement, and WAV headers. `transmitter.test.mjs` checks
+workflow gating, empty-input warnings, render snapshots, automatic downloads,
+cancellation, live text queues,
+worker load races, settings locks, and synchronized waterfall/playback timing. The static-site packager
 includes the catalog, workflow module, and documentation automatically.

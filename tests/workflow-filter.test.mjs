@@ -70,4 +70,4 @@ for(const profile of ['decode','encode','both','full']){
   let stopped=false;listeners.click({target:decorativeChild,preventDefault(){},stopImmediatePropagation(){stopped=true;}});
   assert.equal(stopped,profile!=='full','nested artwork cannot activate a disabled link');
 }
-console.log('Passed: workflow URL defaults, all 495 catalog entries, runtime restrictions, dynamic replacement, and disabled event handling.');
+console.log(`Passed: workflow URL defaults, all ${Object.keys(catalog).length} catalog entries, runtime restrictions, dynamic replacement, and disabled event handling.`);

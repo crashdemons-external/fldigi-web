@@ -2,7 +2,7 @@
   "fldigiVersion": "4.2.13",
   "sourceArchiveSha256": "3840c28caced2e66e86976fbc7d2f72555f6b5ff4a02404100cf88f6eefadcac",
   "compiler": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.11 (a0014542110d6078c3a1a7941fa1ddb3a2281f16)",
-  "builtAt": "2026-10-04T12:45:57.426380+00:00",
+  "builtAt": "2026-10-06T03:27:05.682588+00:00",
   "optimization": "release (-O3)",
-  "wasmSha256": "2ca7e81dd9cb3f9dbd70503576c04389573d5fd4310d93d0ba9154561b9b5d34"
+  "wasmSha256": "d6bbc4702c21972feeab6841ecc99943f66831a85b0a30bb9540909f259e25d3"
 }

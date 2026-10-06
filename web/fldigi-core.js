@@ -1079,7 +1079,7 @@ Module["UTF8ToString"] = UTF8ToString;
 // End JS library exports
 // end include: postlibrary.js
 // Imports from the Wasm binary.
-var _free, _malloc, _web_create, _web_reset, _web_process, _web_set_frequency, _web_set_option, _web_flush, _web_scope, _web_sample_rate, _web_frequency, _web_metric, _web_bandwidth, _web_waterfall_geometry, _web_modes, _web_take_text, _web_take_secondary, _web_status1, _web_status2, _web_spectrum, _web_spectrum_size, _web_phase, _web_phase_quality, _web_channels, _web_take_raster, _web_raster_size, _web_raster_height, _web_take_image_updates, _web_image_updates_size, _web_image_width, _web_image_height, _web_image_serial, _setThrew, __emscripten_tempret_set, __emscripten_stack_restore, _emscripten_stack_get_current, ___cxa_decrement_exception_refcount, ___cxa_increment_exception_refcount, ___cxa_can_catch, ___cxa_get_exception_ptr, memory, __indirect_function_table, wasmMemory, wasmTable;
+var _free, _malloc, _web_create, _web_reset, _web_process, _web_set_frequency, _web_set_option, _web_flush, _web_tx_supported, _web_tx_begin, _web_tx_append, _web_tx_finish, _web_tx_step, _web_tx_buffer, _web_tx_done, _web_tx_ended, _web_tx_cursor, _web_tx_frequency, _web_scope, _web_sample_rate, _web_frequency, _web_metric, _web_bandwidth, _web_waterfall_geometry, _web_modes, _web_take_text, _web_take_secondary, _web_status1, _web_status2, _web_spectrum, _web_spectrum_size, _web_phase, _web_phase_quality, _web_channels, _web_take_raster, _web_raster_size, _web_raster_height, _web_take_image_updates, _web_image_updates_size, _web_image_width, _web_image_height, _web_image_serial, _setThrew, __emscripten_tempret_set, __emscripten_stack_restore, _emscripten_stack_get_current, ___cxa_decrement_exception_refcount, ___cxa_increment_exception_refcount, ___cxa_can_catch, ___cxa_get_exception_ptr, memory, __indirect_function_table, wasmMemory, wasmTable;
 
 function assignWasmExports(wasmExports) {
   _free = Module["_free"] = wasmExports["fa"];
@@ -1090,38 +1090,48 @@ function assignWasmExports(wasmExports) {
   _web_set_frequency = Module["_web_set_frequency"] = wasmExports["ka"];
   _web_set_option = Module["_web_set_option"] = wasmExports["la"];
   _web_flush = Module["_web_flush"] = wasmExports["ma"];
-  _web_scope = Module["_web_scope"] = wasmExports["na"];
-  _web_sample_rate = Module["_web_sample_rate"] = wasmExports["oa"];
-  _web_frequency = Module["_web_frequency"] = wasmExports["pa"];
-  _web_metric = Module["_web_metric"] = wasmExports["qa"];
-  _web_bandwidth = Module["_web_bandwidth"] = wasmExports["ra"];
-  _web_waterfall_geometry = Module["_web_waterfall_geometry"] = wasmExports["sa"];
-  _web_modes = Module["_web_modes"] = wasmExports["ta"];
-  _web_take_text = Module["_web_take_text"] = wasmExports["ua"];
-  _web_take_secondary = Module["_web_take_secondary"] = wasmExports["va"];
-  _web_status1 = Module["_web_status1"] = wasmExports["wa"];
-  _web_status2 = Module["_web_status2"] = wasmExports["xa"];
-  _web_spectrum = Module["_web_spectrum"] = wasmExports["ya"];
-  _web_spectrum_size = Module["_web_spectrum_size"] = wasmExports["za"];
-  _web_phase = Module["_web_phase"] = wasmExports["Aa"];
-  _web_phase_quality = Module["_web_phase_quality"] = wasmExports["Ba"];
-  _web_channels = Module["_web_channels"] = wasmExports["Ca"];
-  _web_take_raster = Module["_web_take_raster"] = wasmExports["Da"];
-  _web_raster_size = Module["_web_raster_size"] = wasmExports["Ea"];
-  _web_raster_height = Module["_web_raster_height"] = wasmExports["Fa"];
-  _web_take_image_updates = Module["_web_take_image_updates"] = wasmExports["Ga"];
-  _web_image_updates_size = Module["_web_image_updates_size"] = wasmExports["Ha"];
-  _web_image_width = Module["_web_image_width"] = wasmExports["Ia"];
-  _web_image_height = Module["_web_image_height"] = wasmExports["Ja"];
-  _web_image_serial = Module["_web_image_serial"] = wasmExports["Ka"];
-  _setThrew = wasmExports["La"];
-  __emscripten_tempret_set = wasmExports["Ma"];
-  __emscripten_stack_restore = wasmExports["Na"];
-  _emscripten_stack_get_current = wasmExports["Oa"];
-  ___cxa_decrement_exception_refcount = wasmExports["Pa"];
-  ___cxa_increment_exception_refcount = wasmExports["Qa"];
-  ___cxa_can_catch = wasmExports["Ra"];
-  ___cxa_get_exception_ptr = wasmExports["Sa"];
+  _web_tx_supported = Module["_web_tx_supported"] = wasmExports["na"];
+  _web_tx_begin = Module["_web_tx_begin"] = wasmExports["oa"];
+  _web_tx_append = Module["_web_tx_append"] = wasmExports["pa"];
+  _web_tx_finish = Module["_web_tx_finish"] = wasmExports["qa"];
+  _web_tx_step = Module["_web_tx_step"] = wasmExports["ra"];
+  _web_tx_buffer = Module["_web_tx_buffer"] = wasmExports["sa"];
+  _web_tx_done = Module["_web_tx_done"] = wasmExports["ta"];
+  _web_tx_ended = Module["_web_tx_ended"] = wasmExports["ua"];
+  _web_tx_cursor = Module["_web_tx_cursor"] = wasmExports["va"];
+  _web_tx_frequency = Module["_web_tx_frequency"] = wasmExports["wa"];
+  _web_scope = Module["_web_scope"] = wasmExports["xa"];
+  _web_sample_rate = Module["_web_sample_rate"] = wasmExports["ya"];
+  _web_frequency = Module["_web_frequency"] = wasmExports["za"];
+  _web_metric = Module["_web_metric"] = wasmExports["Aa"];
+  _web_bandwidth = Module["_web_bandwidth"] = wasmExports["Ba"];
+  _web_waterfall_geometry = Module["_web_waterfall_geometry"] = wasmExports["Ca"];
+  _web_modes = Module["_web_modes"] = wasmExports["Da"];
+  _web_take_text = Module["_web_take_text"] = wasmExports["Ea"];
+  _web_take_secondary = Module["_web_take_secondary"] = wasmExports["Fa"];
+  _web_status1 = Module["_web_status1"] = wasmExports["Ga"];
+  _web_status2 = Module["_web_status2"] = wasmExports["Ha"];
+  _web_spectrum = Module["_web_spectrum"] = wasmExports["Ia"];
+  _web_spectrum_size = Module["_web_spectrum_size"] = wasmExports["Ja"];
+  _web_phase = Module["_web_phase"] = wasmExports["Ka"];
+  _web_phase_quality = Module["_web_phase_quality"] = wasmExports["La"];
+  _web_channels = Module["_web_channels"] = wasmExports["Ma"];
+  _web_take_raster = Module["_web_take_raster"] = wasmExports["Na"];
+  _web_raster_size = Module["_web_raster_size"] = wasmExports["Oa"];
+  _web_raster_height = Module["_web_raster_height"] = wasmExports["Pa"];
+  _web_take_image_updates = Module["_web_take_image_updates"] = wasmExports["Qa"];
+  _web_image_updates_size = Module["_web_image_updates_size"] = wasmExports["Ra"];
+  _web_image_width = Module["_web_image_width"] = wasmExports["Sa"];
+  _web_image_height = Module["_web_image_height"] = wasmExports["Ta"];
+  _web_image_serial = Module["_web_image_serial"] = wasmExports["Ua"];
+  _setThrew = wasmExports["Va"];
+  __emscripten_tempret_set = wasmExports["Wa"];
+  __emscripten_stack_restore = wasmExports["Xa"];
+  _emscripten_stack_get_current = wasmExports["Ya"];
+  ___cxa_decrement_exception_refcount = wasmExports["Za"];
+  ___cxa_increment_exception_refcount = wasmExports["_a"];
+  ___cxa_can_catch = wasmExports["$a"];
+  ___cxa_get_exception_ptr = wasmExports["ab"];
   memory = wasmMemory = wasmExports["ca"];
   __indirect_function_table = wasmTable = wasmExports["ea"];
 }
@@ -1158,8 +1168,8 @@ var wasmImports = {
   /** @export */ l: invoke_i,
   /** @export */ b: invoke_ii,
   /** @export */ p: invoke_iid,
-  /** @export */ y: invoke_iiddi,
-  /** @export */ x: invoke_iidi,
+  /** @export */ z: invoke_iiddi,
+  /** @export */ y: invoke_iidi,
   /** @export */ K: invoke_iif,
   /** @export */ c: invoke_iii,
   /** @export */ e: invoke_iiii,
@@ -1168,20 +1178,20 @@ var wasmImports = {
   /** @export */ J: invoke_iiiiii,
   /** @export */ r: invoke_iiiiiii,
   /** @export */ E: invoke_iiiiiiii,
-  /** @export */ w: invoke_iiiiiiiiiiii,
+  /** @export */ x: invoke_iiiiiiiiiiii,
   /** @export */ k: invoke_v,
   /** @export */ j: invoke_vi,
   /** @export */ ba: invoke_vid,
   /** @export */ L: invoke_vidd,
   /** @export */ f: invoke_vii,
   /** @export */ i: invoke_viii,
-  /** @export */ z: invoke_viiid,
+  /** @export */ A: invoke_viiid,
   /** @export */ B: invoke_viiidd,
-  /** @export */ A: invoke_viiii,
+  /** @export */ v: invoke_viiii,
   /** @export */ t: invoke_viiiii,
   /** @export */ n: invoke_viiiiiii,
   /** @export */ u: invoke_viiiiiiiiii,
-  /** @export */ v: invoke_viiiiiiiiiiiiiii,
+  /** @export */ w: invoke_viiiiiiiiiiiiiii,
   /** @export */ aa: _llvm_eh_typeid_for
 };
 

@@ -32,6 +32,15 @@ Widget *dlgViewer=&widget,*test_signal_window=&widget,*btn_imd_on=&widget,*xmtim
 bool mailserver=false,mailclient=false,bHistory=false,bHighSpeed=false;
 modem* active_modem=nullptr;
 std::string tx_text; int tx_cursor=0;
+static bool tx_live=false,tx_finishing=true,tx_done=true,tx_overflow=false;
+static std::vector<float> tx_samples,tx_chunk;
+static size_t tx_read=0;
+void web_tx_audio(const double* samples,int length){
+    if(!samples||length<1||tx_done)return;
+    // Some upstream modes generate an entire framed message in one call.
+    if(tx_samples.size()+size_t(length)>size_t(1800)*active_modem->get_samplerate()) {tx_overflow=true;return;}
+    for(int i=0;i<length;i++)tx_samples.push_back(std::isfinite(samples[i])?samples[i]:0);
+}
 std::unique_ptr<modem> decoder;
 static int selected_mode = MODE_NULL;
 std::string received,secondary,status1,status2,returned_text,returned_secondary;
@@ -90,7 +99,13 @@ void showDTMF(const std::string& text){received += "\n<DTMF> " + text;}
 void put_MODEstatus(trx_mode){}
 void put_Status1(const char* s,int,int){status1=s;}
 void put_Status2(const char* s,int,int){status2=s;}
-int get_tx_char(){return tx_cursor<int(tx_text.size()) ? static_cast<unsigned char>(tx_text[tx_cursor++]) : GET_TX_CHAR_ETX;}
+int get_tx_char(){
+    if(tx_cursor<int(tx_text.size()))return static_cast<unsigned char>(tx_text[tx_cursor++]);
+    // NAVTEX consumes a complete string until NODATA, rather than ETX.
+    if(active_modem&&active_modem->get_mode()==MODE_NAVTEX)return GET_TX_CHAR_NODATA;
+    if(active_modem&&active_modem->get_mode()==MODE_SITORB)return GET_TX_CHAR_NODATA;
+    return tx_live&&!tx_finishing?GET_TX_CHAR_NODATA:GET_TX_CHAR_ETX;
+}
 double waterfall::powerDensity(double f,double width) const {
     const int low=int(f-width/2),high=int(f+width/2);if(low<0||high>4000||width<0)return 0;
     double sum=0;for(int i=low;i<=high;i++)sum+=powers[i];return sum/(width+1);
@@ -189,6 +204,42 @@ EMSCRIPTEN_KEEPALIVE void web_set_option(int key,double value){
     if(changed&&active_modem){if(key==46&&active_modem->get_mode()==MODE_RTTY)active_modem->restart();if(key==50||key==51)if(auto modem=dynamic_cast<dominoex*>(active_modem))modem->restart();if(key>=53&&key<=55&&active_modem->get_mode()==MODE_FSQ)active_modem->restart();}
 }
 EMSCRIPTEN_KEEPALIVE void web_flush(){if(active_modem)active_modem->rx_flush();rx_charset.flush();received+=rx_charset.data();rx_charset.clear();secondary_charset.flush();secondary+=secondary_charset.data();secondary_charset.clear();}
+// An encoder uses a separate WASM instance from the browser receiver.
+EMSCRIPTEN_KEEPALIVE int web_tx_supported(int mode){return mode>=0&&mode<=WEB_MODE_DTMF&&std::string(web_family(mode))!=""&&std::string(web_family(mode))!="WEFAX";}
+EMSCRIPTEN_KEEPALIVE int web_tx_begin(const char* text,int live,double offset){
+    if(!active_modem||!web_tx_supported(selected_mode)||!text||!std::isfinite(offset))return 0;
+    tx_text=text;tx_cursor=0;tx_live=live;tx_finishing=!live;tx_done=false;tx_overflow=false;
+    tx_read=0;tx_samples.clear();tx_chunk.clear();modem::tx_sample_count=0;
+    fft_ring.fill(0);fft_write=fft_count=0;spectrum.fill(-100);
+    progdefaults.TxOffset=clamp(offset,-500.0,500.0);trx_state=STATE_TX;
+    active_modem->set_stopflag(false);active_modem->tx_init();return active_modem->get_samplerate();
+}
+EMSCRIPTEN_KEEPALIVE int web_tx_append(const char* text){if(tx_done||tx_finishing||!text)return 0;tx_text+=text;return 1;}
+EMSCRIPTEN_KEEPALIVE void web_tx_finish(){tx_finishing=true;}
+EMSCRIPTEN_KEEPALIVE int web_tx_step(int maximum){
+    tx_chunk.clear();maximum=clamp(maximum,1,8192);
+    if(tx_overflow)return -1;
+    if(tx_read>=tx_samples.size()){
+        tx_read=0;tx_samples.clear();
+        if(tx_done)return 0;
+        int result=active_modem->tx_process();
+        if(result<0){tx_done=true;trx_state=STATE_RX;}
+        if(tx_overflow)return -1;
+        // CW waits silently when its live text queue is empty. Yield silence
+        // to the audio clock instead of spinning the browser worker.
+        if(!tx_done&&tx_samples.empty())tx_samples.resize(std::min(maximum,512),0);
+    }
+    size_t length=std::min(size_t(maximum),tx_samples.size()-tx_read);
+    tx_chunk.assign(tx_samples.begin()+tx_read,tx_samples.begin()+tx_read+length);tx_read+=length;
+    // Mirror desktop trx_xmit_wfall_queue without invoking the receive modem.
+    if(tx_live&&length){std::vector<double> pcm(tx_chunk.begin(),tx_chunk.end());update_spectrum(pcm.data(),int(length));}
+    return int(length);
+}
+EMSCRIPTEN_KEEPALIVE const float* web_tx_buffer(){return tx_chunk.data();}
+EMSCRIPTEN_KEEPALIVE int web_tx_done(){return tx_done&&tx_read>=tx_samples.size();}
+EMSCRIPTEN_KEEPALIVE int web_tx_ended(){return tx_done;}
+EMSCRIPTEN_KEEPALIVE int web_tx_cursor(){return tx_cursor;}
+EMSCRIPTEN_KEEPALIVE double web_tx_frequency(){return active_modem?active_modem->get_txfreq_woffset():1500;}
 EMSCRIPTEN_KEEPALIVE const char* web_scope(){
     static std::string json;std::ostringstream out;out<<"{\"mode\":"<<scope_mode<<",\"serial\":"<<scope_serial<<",\"phase\":"<<scope_phase<<",\"quality\":"<<scope_quality<<",\"highlight\":"<<(scope_highlight?"true":"false")<<",\"axis\":"<<scope_axis<<",\"videoSerial\":"<<scope_video_serial<<",\"videoDirection\":"<<(scope_video_direction?"true":"false");
     auto array=[&out](const char* name,const std::vector<double>& values){out<<",\""<<name<<"\":[";for(size_t i=0;i<values.size();i++){if(i)out<<',';out<<(std::isfinite(values[i])?values[i]:0);}out<<']';};array("trace",scope_trace);array("xy",scope_xy);array("video",scope_video);out<<'}';json=out.str();return json.c_str();

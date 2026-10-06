@@ -1,6 +1,6 @@
 import {Resampler} from './resampler.js';
 
-const options = {afc:0,sql:1,squelch:2,reverse:3,rttyShift:4,rttyBaud:5,rttyBits:6,rttyParity:7,rttyStop:8,lowercase:9,showChannels:12,
+export const options = {afc:0,sql:1,squelch:2,reverse:3,rttyShift:4,rttyBaud:5,rttyBits:6,rttyParity:7,rttyStop:8,lowercase:9,showChannels:12,
   lowCutoff:13,highCutoff:14,cwSpeed:15,cwBandwidth:16,cwTrack:17,cwMatched:18,cwRange:19,cwMin:20,cwMax:21,cwFilter:22,cwSom:23,
   hellAgc:24,hellWidth:25,hellHeight:26,hellBandwidth:27,hellBlackboard:28,ifkpBaud:29,
   oliviaBandwidth:31,oliviaTones:32,oliviaIntegration:33,oliviaMargin:34,contestiaBandwidth:35,contestiaTones:36,contestiaIntegration:37,contestiaMargin:38,wefaxLpm:39,fsqBaud:43,

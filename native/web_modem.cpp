@@ -19,15 +19,15 @@ void modem::set_bandwidth(double bw){bandwidth=bw;}
 void modem::set_samplerate(int rate){samplerate=rate;}
 void modem::set_metric(double m){metric=m;}
 void modem::display_metric(double m){metric=m;}
-double modem::get_txfreq() const {return frequency;}
-double modem::get_txfreq_woffset() const {return frequency;}
+double modem::get_txfreq() const {return mode==MODE_FSQ?1500:tx_frequency;}
+double modem::get_txfreq_woffset() const {return get_txfreq()-progdefaults.TxOffset;}
 int modem::tx_process(){return -1;}
 void modem::videoText(){}
 void modem::s2nreport(){}
 void modem::pretone(){}
 void modem::init_queues(){}
-void modem::ModulateXmtr(double*,int){}
-void modem::ModulateStereo(double*,double*,int,bool){}
-void modem::ModulateVideo(double*,int){}
-void modem::ModulateVideoStereo(double*,double*,int,bool){}
+#include "web_modem_transmit.h"
+void modem::ModulateStereo(double* samples,double*,int length,bool){ModulateXmtr(samples,length);}
+void modem::ModulateVideo(double* samples,int length){ModulateXmtr(samples,length);}
+void modem::ModulateVideoStereo(double* samples,double*,int length,bool){ModulateXmtr(samples,length);}
 #include "web_modem_quality.h"

@@ -38,12 +38,13 @@ function receiver(workflow='decode'){
     createMediaElementSource(){assert.equal(++mediaSources,1,'reuse the existing MediaElementAudioSourceNode');return new Node();}
     createMediaStreamSource(){return new Node();}
   }
-  const track={stopped:false,label:'Test microphone',stop(){this.stopped=true;},addEventListener(){},getSettings(){return {};}};
+  const trackListeners={};
+  const track={stopped:false,readyState:'live',label:'Test microphone',stop(){this.stopped=true;this.readyState='ended';},addEventListener(name,fn){trackListeners[name]=fn;},getSettings(){return {};}};
   const capture={getTracks:()=>[track],getAudioTracks:()=>[track]};
   const sandbox={
-    $:get,audio,settings:{...defaults},decodeEnabled:workflow!=='encode',encodeEnabled:workflow!=='decode',workerReady:true,live:false,openingLive:false,sourceGeneration:0,audioGeneration:0,activeInput:'none',fileUrl:undefined,
+    $:get,audio,settings:{...defaults},transmitter:undefined,decodeEnabled:workflow!=='encode',encodeEnabled:workflow!=='decode',workerReady:true,live:false,openingLive:false,resumeMicAfterTx:false,sourceGeneration:0,audioGeneration:0,activeInput:'none',fileUrl:undefined,
     stream:undefined,liveSource:undefined,liveWorklet:undefined,liveGain:undefined,fileSource:undefined,fileWorklet:undefined,fileGain:undefined,
-    audioContext:undefined,audioSetup:undefined,captureDeviceSelection:undefined,latestSpectrum:undefined,
+    audioContext:undefined,audioSetup:undefined,captureDeviceSelection:undefined,latestSpectrum:undefined,configuredMode:undefined,configureSequence:0,
     AudioContext,AudioWorkletNode:Node,Float32Array,scopeDisplay:{reset(){}},worker:{postMessage:data=>reports.push(data)},
     window:{isSecureContext:true},navigator:{mediaDevices:{getUserMedia:constraints=>{requests.push(constraints);return permission.promise;}}},
     document:{body:{classList:{add:name=>bodyClasses.add(name),remove:name=>bodyClasses.delete(name)}},
@@ -56,10 +57,10 @@ function receiver(workflow='decode'){
     between('function postDecoder(','function configureDecoder('),
     between('function configureDecoder(','function syncFrequencyInputs('),
     between('function ensureReady(){','function download('),
-    '({startLive,stopLive,loadFile,togglePlayback,closeFile,postDecoder,configureDecoder,generateAudio})',
+    '({startLive,stopLive,pauseReceiveInput,resumeReceiveInput,loadFile,togglePlayback,closeFile,stopAudio,postDecoder,configureDecoder,generateAudio})',
   ].join('\n'),sandbox);
   vm.runInNewContext(between("document.addEventListener('keydown',event=>{","window.addEventListener('beforeunload'"),sandbox);
-  return {...api,state:sandbox,get,audio,permission,capture,track,revoked,reports,messages,dialogs,requests,bodyClasses,keydown:keyboardListeners.keydown};
+  return {...api,state:sandbox,get,audio,permission,capture,track,revoked,reports,messages,dialogs,requests,bodyClasses,keydown:keyboardListeners.keydown,endTrack(){track.readyState='ended';trackListeners.ended();}};
 }
 
 // Switching a playing recording to mic removes the file before permission is
@@ -111,6 +112,84 @@ function receiver(workflow='decode'){
   assert.equal(rx.track.stopped,true);assert.equal(rx.state.live,false);assert.equal(rx.state.openingLive,false);
   assert.equal(rx.state.fileUrl,url);assert.equal(rx.get('source-indicator').textContent,'FILE');
   await rx.togglePlayback();assert.equal(rx.state.activeInput,'file');
+}
+
+// A queued receiver Play cannot revive a recording after TX takes ownership.
+{
+  const rx=receiver();await rx.loadFile({name:'first.wav'});
+  const gate=deferred();rx.state.audioContext.state='suspended';rx.state.audioContext.resumeGate=gate;
+  const pending=rx.togglePlayback();await settle();
+  rx.state.transmitter={active:true};gate.resolve();await pending;
+  assert.equal(rx.audio.playCalls,0);rx.audio.dispatch('play');assert.equal(rx.audio.paused,true);
+}
+
+// Realtime TX holds capture access and the graph, but forwards no microphone PCM.
+// Returning to receive uses the same worklet with a fresh stream generation.
+for(const profile of ['both','full']){
+  const rx=receiver(profile),pending=rx.startLive();rx.permission.resolve(rx.capture);await pending;
+  const source=rx.state.liveSource,worklet=rx.state.liveWorklet,gain=rx.state.liveGain,before=rx.state.audioGeneration;
+  rx.state.transmitter={active:true};rx.pauseReceiveInput('live');
+  assert.equal(rx.track.stopped,false);assert.equal(rx.state.stream,rx.capture);
+  assert.equal(rx.state.liveSource,source);assert.equal(rx.state.liveWorklet,worklet);assert.equal(rx.state.liveGain,gain);
+  assert.equal(source.disconnected,undefined);assert.equal(worklet.disconnected,undefined);
+  assert.equal(rx.state.activeInput,'none');assert.equal(rx.state.resumeMicAfterTx,true);assert.equal(rx.bodyClasses.has('live'),false);
+  assert.ok(rx.state.audioGeneration>before);assert.equal(rx.reports.at(-1).active,false);
+  let forwarded=rx.reports.filter(m=>m.type==='audio').length;
+  worklet.port.onmessage({data:{samples:new Float32Array(2048),rate:48000,generation:before}});
+  worklet.port.onmessage({data:{samples:new Float32Array(2048),rate:48000,generation:rx.state.audioGeneration}});
+  assert.equal(rx.reports.filter(m=>m.type==='audio').length,forwarded,'held microphone input cannot reach the decoder during TX');
+  const heldGeneration=rx.state.audioGeneration;rx.state.transmitter.active=false;
+  assert.equal(rx.resumeReceiveInput(),true);assert.equal(rx.state.activeInput,'live');assert.equal(rx.bodyClasses.has('live'),true);
+  assert.equal(rx.state.liveWorklet,worklet);assert.equal(rx.requests.length,1,'resumption does not request capture again');
+  assert.equal(rx.get('rx-button').getAttribute('aria-pressed'),'true');assert.equal(rx.get('source-indicator').textContent,'LIVE');
+  assert.ok(rx.reports.some(m=>m.command==='reset'&&m.active===true&&m.generation===rx.state.audioGeneration));
+  worklet.port.onmessage({data:{samples:new Float32Array(2048),rate:48000,generation:heldGeneration}});
+  assert.equal(rx.reports.filter(m=>m.type==='audio').length,forwarded,'TX-era buffers are discarded');
+  worklet.port.onmessage({data:{samples:new Float32Array(2048),rate:48000,generation:rx.state.audioGeneration}});
+  assert.equal(rx.reports.filter(m=>m.type==='audio').length,forwarded+1);
+  assert.equal(rx.resumeReceiveInput(),false,'a completed handoff cannot resume twice');
+  rx.stopLive();assert.equal(rx.track.stopped,true);
+}
+
+// An explicit global Stop releases the held microphone and clears the handoff.
+{
+  const rx=receiver('both'),pending=rx.startLive();rx.permission.resolve(rx.capture);await pending;
+  const worklet=rx.state.liveWorklet;
+  rx.state.transmitter={active:true,cancel(){this.active=false;rx.stopLive();}};
+  rx.pauseReceiveInput('live');rx.stopAudio();
+  assert.equal(rx.track.stopped,true);assert.ok(worklet.disconnected);assert.equal(rx.state.stream,undefined);
+  assert.equal(rx.state.activeInput,'none');assert.equal(rx.resumeReceiveInput(),false);assert.equal(rx.requests.length,1);
+  assert.equal(rx.messages.at(-1).message,'Audio stopped');
+}
+
+// Device disconnection and switching to a recording invalidate the held stream.
+for(const action of ['disconnect','file']){
+  const rx=receiver('both'),pending=rx.startLive();rx.permission.resolve(rx.capture);await pending;
+  rx.state.transmitter={active:true,cancel(){this.active=false;rx.stopLive();}};rx.pauseReceiveInput('live');
+  if(action==='disconnect'){rx.endTrack();assert.equal(rx.get('source-indicator').textContent,'TX');}
+  else await rx.loadFile({name:'replacement.wav'});
+  assert.equal(rx.track.stopped,true);assert.equal(rx.resumeReceiveInput(),false);assert.equal(rx.requests.length,1);
+  assert.equal(rx.state.activeInput,'none');
+}
+
+// TX never acquires a microphone by itself or resumes recording playback.
+{
+  const rx=receiver('both');rx.pauseReceiveInput('live');assert.equal(rx.resumeReceiveInput(),false);assert.equal(rx.requests.length,0);
+  await rx.loadFile({name:'keep.wav'});await rx.togglePlayback();const url=rx.state.fileUrl;
+  rx.pauseReceiveInput('live');assert.equal(rx.audio.paused,true);assert.equal(rx.state.fileUrl,url);
+  assert.equal(rx.resumeReceiveInput(),false);assert.equal(rx.audio.playCalls,1);
+}
+
+// Rendering keeps its existing capture-stop behavior, and a pending permission
+// request cannot activate input after TX has started.
+{
+  const rx=receiver('both'),pending=rx.startLive();rx.permission.resolve(rx.capture);await pending;
+  rx.pauseReceiveInput('render');assert.equal(rx.track.stopped,true);assert.equal(rx.resumeReceiveInput(),false);
+}
+{
+  const rx=receiver('both'),pending=rx.startLive();rx.pauseReceiveInput('live');
+  rx.permission.resolve(rx.capture);await pending;
+  assert.equal(rx.track.stopped,true);assert.equal(rx.state.live,false);assert.equal(rx.resumeReceiveInput(),false);
 }
 
 // Denied capture leaves the old file unloaded and playback cannot affect input.
@@ -188,10 +267,11 @@ for(const [name,expected]of [['NotFoundError',/selected microphone is unavailabl
   tx.state.worker.onmessage({data:{type:'decoded',text:'SHOULD NOT APPEAR'}});
   tx.state.worker.onmessage({data:{type:'configured',sequence:0}});
   assert.equal(tx.get('rx-text').value,0);assert.equal(tx.messages.length,0);
-  tx.generateAudio();assert.match(tx.dialogs.at(-1).message,/not implemented/);
+  let generated=0;tx.state.transmitter={generate(){generated++;}};
+  tx.generateAudio();assert.equal(generated,1);
 }
 {
   const rx=receiver('decode');rx.generateAudio();assert.equal(rx.dialogs.length,0);
 }
 
-console.log('Passed: exclusive audio sources, permission diagnostics, capture cancellation, and encode-only decoder isolation.');
+console.log('Passed: exclusive audio sources, held-microphone TX handoff, explicit stop/disconnection, permission diagnostics, capture cancellation, and encode-only decoder isolation.');

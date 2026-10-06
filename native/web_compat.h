@@ -79,6 +79,7 @@ extern bool mailserver, mailclient, bHistory, bHighSpeed;
 extern class modem* active_modem;
 extern std::string tx_text;
 extern int tx_cursor;
+void web_tx_audio(const double*, int);
 int get_tx_char();
 void put_rx_char(unsigned int, int style = FTextBase::RECV);
 void put_echo_char(unsigned int);

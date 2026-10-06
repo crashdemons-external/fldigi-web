@@ -62,6 +62,13 @@ def main():
     base = (UPSTREAM / 'trx/modem.cxx').read_text()
     quality = re.search(r'int modem::get_quality\(int mode\).*?return get_quality\(mode\);\s*}', base, re.S).group(0)
     (inc / 'web_modem_quality.h').write_text(quality + '\n')
+    # Preserve the native signal ramps and output limiter, replacing only the
+    # sound-card write. Hardware PTT/auxiliary channels remain desktop-only.
+    modulation = base[base.index('void modem::ModulateXmtr'):]
+    envelope = modulation[modulation.index('\tint num ='):modulation.index('\tif (progdefaults.PTTrightchannel)')]
+    level = modulation[modulation.index('\tdouble mult ='):modulation.index('\n\ttry {')]
+    transmit = 'void modem::ModulateXmtr(double* buffer,int len) {\nif(!buffer||len<1)return;\ntx_sample_rate=samplerate;tx_sample_count+=len;\nconst double SIGLIMIT=0.95;\n' + envelope + level + '\nweb_tx_audio(buffer,len);\n}\n'
+    (inc / 'web_modem_transmit.h').write_text(transmit)
     (inc / 're.h').write_text((inc / 're.h').read_text().replace('"compat/regex.h"','<regex.h>'))
     shutil.copytree(UPSTREAM / "include/jalocha", inc / "jalocha", dirs_exist_ok=True)
     modem = (UPSTREAM / "include/modem.h").read_text(encoding="utf-8", errors="replace")
@@ -87,7 +94,6 @@ def main():
 \t\tif (dptr < size_t(framesize)) continue;
 \t\tdptr = 0;
 \t\tint x = decode();''' + text[end:]
-            text = text[:text.index('void cDTMF::makeshape()')]
             text = text.replace('REQ(showDTMF, dtmfchars);', 'showDTMF(dtmfchars);')
             text = text.replace('if (maxpower <', 'active_modem->display_metric(clamp(maxpower / 10.0, 0.0, 100.0));\n\tif (maxpower <')
             text += '\nvoid cDTMF::flush() { if (!dtmfchars.empty()) { showDTMF(dtmfchars); dtmfchars.clear(); } }\n'
@@ -141,7 +147,7 @@ def main():
     (inc / "config.h").write_text('#pragma once\n#define BENCHMARK_MODE 0\n#define HAVE_STD_BIND 1\n#define HAVE_STD_HASH 1\n#define HAVE_CLOCK_GETTIME 1\n#include "web_compat.h"\n')
     combined = re.sub(r'/\*.*?\*/|//[^\n]*', '', combined, flags=re.S)
     fields = set(re.findall(r"progdefaults\.(\w+)", combined))
-    fields.update(['wfPreFilter', 'wf_latency'])
+    fields.update(['wfPreFilter', 'wf_latency', 'TxOffset', 'SoftStart'])
     values = {a[1]: a for a in elements((UPSTREAM / "include/configuration.h").read_text(encoding="utf-8", errors="replace"))}
     config = ['#pragma once', 'struct WebConfiguration {']
     for name in sorted(fields):
@@ -152,6 +158,7 @@ def main():
     config.append('};\nextern WebConfiguration progdefaults;\n')
     (inc / "web_configuration.h").write_text("\n".join(config))
     status_fields = set(re.findall(r"progStatus\.(\w+)", combined))
+    status_fields.add('txlevel')
     status_text = (UPSTREAM / "include/status.h").read_text(encoding="utf-8", errors="replace")
     status = ['#pragma once', 'struct WebStatus {']
     for name in sorted(status_fields):
