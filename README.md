@@ -22,3 +22,18 @@ python scripts/serve.py
 Open <http://localhost:8080>. The build reads `reference/fldigi-source.zip`; provide this archive separately when it is not present in your checkout. A generated browser core is included, so the build step can be skipped when you only want to run the application.
 
 Fldigi web is distributed under the GNU General Public License, version 3 or later. See [COPYING](COPYING) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Microphone access on Android Chrome
+
+Live capture requires HTTPS or localhost. Opening a local server by its HTTP LAN
+address on a phone cannot request microphone permission; the hosted demo uses HTTPS.
+
+If capture is blocked without a prompt, check both permission settings:
+
+- In Chrome, open **Settings → Site settings → Microphone**. Allow sites to ask
+  and allow the receiver's site if it appears under Blocked.
+- In Android, open **Settings → Apps → Chrome → Permissions → Microphone** and
+  allow access while using the app.
+
+Return to the receiver and tap **Rx** again. See
+[Google's microphone permission instructions](https://support.google.com/chrome/answer/2693767?co=GENIE.Platform%3DAndroid&hl=en).

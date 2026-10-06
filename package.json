@@ -5,6 +5,6 @@
   "scripts": {
     "build": "python scripts/build.py",
     "start": "python scripts/serve.py",
-    "test": "node tests/core.test.mjs && node tests/resampler.test.mjs && node tests/waterfall.test.mjs && node tests/behavior.test.mjs && node tests/scope.test.mjs && node tests/dtmf.test.mjs && node tests/workflow.test.mjs && node tests/audio-source.test.mjs"
+    "test": "node tests/core.test.mjs && node tests/resampler.test.mjs && node tests/waterfall.test.mjs && node tests/behavior.test.mjs && node tests/scope.test.mjs && node tests/dtmf.test.mjs && node tests/workflow.test.mjs && node tests/audio-source.test.mjs && node tests/menu-input.test.mjs"
   }
 }

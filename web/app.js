@@ -92,18 +92,31 @@ function closeMenus(){closeBranches();hoverOpenedMenu=undefined;document.querySe
 function openMenu(menu){closeMenus();menu.classList.add('open');menu.querySelector('.menu-heading').setAttribute('aria-expanded','true');}
 document.querySelectorAll('.menu-heading').forEach(button=>{
   button.addEventListener('click',event=>{event.stopPropagation();if(button.disabled)return;const menu=button.parentElement,keepOpen=!menu.classList.contains('open')||hoverOpenedMenu===menu;closeMenus();if(keepOpen)openMenu(menu);});
-  button.parentElement.addEventListener('pointerenter',()=>{if(button.disabled)return;const menu=button.parentElement;if(document.querySelector('.menu.open')&&!menu.classList.contains('open')){openMenu(menu);hoverOpenedMenu=menu;}});
+  button.parentElement.addEventListener('pointerenter',event=>{if(event.pointerType!=='mouse'||button.disabled)return;const menu=button.parentElement;if(document.querySelector('.menu.open')&&!menu.classList.contains('open')){openMenu(menu);hoverOpenedMenu=menu;}});
 });
 function bindMenuBranches(root){root.querySelectorAll('.menu-branch').forEach(branch=>{
   const heading=branch.querySelector('.submenu-heading');
   heading.setAttribute('aria-label',heading.textContent);
   const open=()=>{
     if(heading.disabled)return;closeBranches(branch.parentElement);branch.classList.add('submenu-open');heading.setAttribute('aria-expanded','true');
-    const popup=branch.querySelector('.menu-submenu');popup.style.top='-3px';
-    const bottom=popup.getBoundingClientRect().bottom;if(bottom>innerHeight-4)popup.style.top=(-3-(bottom-innerHeight+4))+'px';
+    const popup=branch.querySelector('.menu-submenu');popup.style.top='-3px';popup.style.left='100%';popup.style.maxHeight='';
+    const viewport=window.visualViewport,left=viewport?.offsetLeft||0,top=viewport?.offsetTop||0;
+    const right=left+(viewport?.width||innerWidth)-4,bottom=top+(viewport?.height||innerHeight)-4;
+    const bounds=popup.getBoundingClientRect(),parent=branch.getBoundingClientRect();
+    if(bounds.right>right){
+      popup.style.left=(Math.max(left+4,right-bounds.width)-parent.left)+'px';
+      // An overlapping submenu must not cover the heading that opened it:
+      // mouse hover can open it before the pending click reaches the heading.
+      const anchor=heading.getBoundingClientRect(),below=Math.max(0,bottom-anchor.bottom),above=Math.max(0,anchor.top-top-4);
+      const useBelow=below>=bounds.height||below>=above,height=Math.min(bounds.height,useBelow?below:above);
+      popup.style.top=(useBelow?anchor.bottom-parent.top:anchor.top-parent.top-height)+'px';
+      popup.style.maxHeight=Math.max(24,height)+'px';
+    }else if(bounds.bottom>bottom)popup.style.top=(Math.max(top+4,bottom-bounds.height)-parent.top)+'px';
   };
-  branch.addEventListener('pointerenter',open);
-  branch.addEventListener('pointerleave',()=>{closeBranches(branch.parentElement);});
+  // Touch/pen pointers enter on contact and leave when lifted. Closing here can
+  // hide the tapped action before its click, including the file-picker action.
+  branch.addEventListener('pointerenter',event=>{if(event.pointerType==='mouse')open();});
+  branch.addEventListener('pointerleave',event=>{if(event.pointerType==='mouse')closeBranches(branch.parentElement);});
   heading.addEventListener('click',event=>{event.stopPropagation();open();});
   heading.addEventListener('keydown',event=>{if(event.key==='ArrowRight'||event.key==='ArrowDown'){event.preventDefault();open();branch.querySelector('.menu-submenu button:not(:disabled)')?.focus();}else if(event.key==='ArrowLeft'){event.preventDefault();closeBranches(branch.parentElement);heading.focus();}});
 });}
@@ -160,6 +173,20 @@ worker.onmessage=({data})=>{
   }
 };
 function ensureReady(){if(!workerReady)throw new Error('The fldigi decoder is still loading.');}
+function ensureMicrophoneAccess(){
+  if(!window.isSecureContext)throw new Error('Microphone capture requires HTTPS or localhost. An HTTP address on your local network cannot request microphone permission.');
+  if(!navigator.mediaDevices?.getUserMedia)throw new Error('Microphone capture is unavailable in this browser. Open the receiver directly in Chrome or another browser that supports microphone input.');
+  const policy=document.permissionsPolicy||document.featurePolicy;
+  if(policy?.allowsFeature('microphone')===false)throw new Error('Microphone capture is blocked by this page\'s Permissions Policy. Open the receiver directly instead of inside an embedded page, or allow microphone access in the embedding page.');
+}
+function reportMicrophoneError(error){
+  if(error.name==='NotAllowedError'||error.name==='PermissionDeniedError'){
+    status('Microphone access is blocked. Check site and device permissions, then try Rx again.',true);
+    showMessage('Microphone access blocked','The browser refused microphone access. A saved site block, device permission, or browser policy can prevent a permission prompt.\n\nAllow microphone access for this site in your browser\'s site settings.\n\nOn Android Chrome:\n1. Chrome → Settings → Site settings → Microphone: allow sites to ask, and allow this site if it is blocked.\n2. Android Settings → Apps → Chrome → Permissions → Microphone: allow access while using the app.\n3. Return to this page and tap Rx again.');
+  }else if(error.name==='NotFoundError'||error.name==='OverconstrainedError')status('The selected microphone is unavailable. Choose Default audio input under Configure → Sound card → Devices and try Rx again.',true);
+  else if(error.name==='NotReadableError')status('The microphone could not be opened. Check device access and other apps using it, then try Rx again.',true);
+  else status(error.message,true);
+}
 async function context(){
   if(!audioSetup){audioContext=new AudioContext({latencyHint:'interactive'});audioSetup=audioContext.audioWorklet.addModule('./audio-worklet.js');}
   await audioSetup;
@@ -186,17 +213,22 @@ function stopLive(){
 }
 async function startLive(){
   if(live||openingLive){stopLive();status('Live audio stopped');return;}
+  try{ensureReady();ensureMicrophoneAccess();}catch(error){status(error.message,true);return;}
   const generation=++sourceGeneration;openingLive=true;captureDeviceSelection=settings.inputDevice;
   try{
-    ensureReady();resetAudioPipeline('none');if(fileUrl)closeFile();await context();if(generation!==sourceGeneration)return;status('Waiting for microphone permission…');
-    const capture=await navigator.mediaDevices.getUserMedia({audio:{deviceId:captureDeviceSelection==='default'?undefined:{exact:captureDeviceSelection},echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false});
+    resetAudioPipeline('none');if(fileUrl)closeFile();status('Waiting for microphone permission…');
+    // Request capture directly from the user's tap, before asynchronous audio setup.
+    let capture;
+    try{capture=await navigator.mediaDevices.getUserMedia({audio:{deviceId:captureDeviceSelection==='default'?undefined:{exact:captureDeviceSelection},echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false});}
+    catch(error){if(generation!==sourceGeneration)return;stopLive();reportMicrophoneError(error);return;}
     if(generation!==sourceGeneration){capture.getTracks().forEach(track=>track.stop());return;}
-    stream=capture;resetAudioPipeline('live');liveSource=audioContext.createMediaStreamSource(stream);({worklet:liveWorklet,gain:liveGain}=connectInput(liveSource,false));
+    stream=capture;await context();if(generation!==sourceGeneration)return;
+    resetAudioPipeline('live');liveSource=audioContext.createMediaStreamSource(stream);({worklet:liveWorklet,gain:liveGain}=connectInput(liveSource,false));
     live=true;openingLive=false;document.body.classList.add('live');$('rx-button').setAttribute('aria-pressed','true');$('source-indicator').textContent='LIVE';
     const track=stream.getAudioTracks()[0];track.addEventListener('ended',()=>{if(stream===capture){stopLive();status('Audio input disconnected',true);}});
     const applied=track.getSettings();const processed=applied.echoCancellation||applied.noiseSuppression||applied.autoGainControl;
     status(`Live: ${track.label || 'Audio input'}${processed?' · Device speech processing is active':''}`);await refreshDevices();
-  }catch(error){if(generation!==sourceGeneration)return;stopLive();status(error.name==='NotAllowedError'?'Microphone permission was denied. Allow audio access for this site to use live decoding.':error.message,true);}
+  }catch(error){if(generation!==sourceGeneration)return;stopLive();status(error.message,true);}
 }
 async function loadFile(file){
   try{ensureReady();stopLive();resetAudioPipeline('none');audio.pause();if(fileUrl)URL.revokeObjectURL(fileUrl);fileUrl=URL.createObjectURL(file);audio.src=fileUrl;$('file-name').textContent=file.name;$('file-name').title=file.name;$('playback-bar').hidden=false;$('source-indicator').textContent='FILE';syncPlaybackButton();

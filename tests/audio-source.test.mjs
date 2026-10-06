@@ -24,14 +24,14 @@ function receiver(){
   audio.pause=()=>{audio.paused=true;};
   audio.removeAttribute=name=>{delete audio[name];};
   audio.load=()=>{audio.paused=true;audio.duration=NaN;audio.currentTime=0;};
-  const permission=deferred(),revoked=[],reports=[],messages=[],bodyClasses=new Set();let urlSerial=0,mediaSources=0;
+  const permission=deferred(),revoked=[],reports=[],messages=[],dialogs=[],requests=[],bodyClasses=new Set();let urlSerial=0,mediaSources=0;
   class Node {
     constructor(){this.port={postMessage:data=>reports.push(data)};this.gain={value:0};}
     connect(){}
     disconnect(){this.disconnected=true;}
   }
   class AudioContext {
-    constructor(){this.state='running';this.sampleRate=48000;this.audioWorklet={addModule:async()=>{}};}
+    constructor(){this.state='running';this.sampleRate=48000;this.audioWorklet={addModule:()=>sandbox.setupGate?.promise??Promise.resolve()};}
     resume(){this.state='running';return this.resumeGate?.promise??Promise.resolve();}
     createGain(){return new Node();}
     createMediaElementSource(){assert.equal(++mediaSources,1,'reuse the existing MediaElementAudioSourceNode');return new Node();}
@@ -44,17 +44,17 @@ function receiver(){
     stream:undefined,liveSource:undefined,liveWorklet:undefined,liveGain:undefined,fileSource:undefined,fileWorklet:undefined,fileGain:undefined,
     audioContext:undefined,audioSetup:undefined,captureDeviceSelection:undefined,latestSpectrum:undefined,
     AudioContext,AudioWorkletNode:Node,Float32Array,scopeDisplay:{reset(){}},worker:{postMessage:data=>reports.push(data)},
-    navigator:{mediaDevices:{getUserMedia:()=>permission.promise}},
+    window:{isSecureContext:true},navigator:{mediaDevices:{getUserMedia:constraints=>{requests.push(constraints);return permission.promise;}}},
     document:{body:{classList:{add:name=>bodyClasses.add(name),remove:name=>bodyClasses.delete(name)}}},
     URL:{createObjectURL:()=>`blob:test-${++urlSerial}`,revokeObjectURL:url=>revoked.push(url)},
-    status:(message,error=false)=>messages.push({message,error}),refreshDevices:async()=>{},
+    status:(message,error=false)=>messages.push({message,error}),showMessage:(title,message)=>dialogs.push({title,message}),refreshDevices:async()=>{},
   };
   const api=vm.runInNewContext([
     between('function postDecoder(','function configureDecoder('),
     between('function ensureReady(){','function download('),
     '({startLive,stopLive,loadFile,togglePlayback,closeFile})',
   ].join('\n'),sandbox);
-  return {...api,state:sandbox,get,audio,permission,capture,track,revoked,reports,messages,bodyClasses};
+  return {...api,state:sandbox,get,audio,permission,capture,track,revoked,reports,messages,dialogs,requests,bodyClasses};
 }
 
 // Switching a playing recording to mic removes the file before permission is
@@ -116,7 +116,53 @@ function receiver(){
   await rx.togglePlayback();
   assert.equal(rx.state.fileUrl,undefined);assert.equal(rx.state.activeInput,'none');assert.equal(rx.audio.playCalls,0);
   assert.equal(rx.get('playback-bar').hidden,true);assert.equal(rx.get('source-indicator').textContent,'RX');
-  assert.equal(rx.messages.at(-1).error,true);assert.match(rx.messages.at(-1).message,/permission was denied/);
+  assert.equal(rx.messages.at(-1).error,true);assert.match(rx.messages.at(-1).message,/access is blocked/);
+  assert.match(rx.dialogs.at(-1).message,/Site settings → Microphone/);assert.match(rx.dialogs.at(-1).message,/Apps → Chrome → Permissions → Microphone/);
 }
 
-console.log('Passed: exclusive audio sources, stale playback guards, reusable file graph, and capture permission cancellation.');
+// The permission request starts synchronously in the tap handler, without waiting
+// for a worklet fetch/resume, and keeps the receiver's unprocessed input constraints.
+{
+  const rx=receiver();const pending=rx.startLive();
+  assert.equal(rx.requests.length,1);assert.equal(rx.state.audioContext,undefined);
+  assert.equal(rx.requests[0].video,false);assert.equal(rx.requests[0].audio.echoCancellation,false);
+  assert.equal(rx.requests[0].audio.noiseSuppression,false);assert.equal(rx.requests[0].audio.autoGainControl,false);
+  rx.permission.resolve(rx.capture);await pending;assert.equal(rx.state.live,true);
+}
+
+// Capture acquired before audio setup must be released on cancellation or a
+// worklet failure. Audio setup errors must not be mislabeled as permission errors.
+{
+  const rx=receiver();rx.state.setupGate=deferred();const pending=rx.startLive();
+  rx.permission.resolve(rx.capture);await settle();assert.equal(rx.state.stream,rx.capture);
+  rx.stopLive();assert.equal(rx.track.stopped,true);rx.state.setupGate.resolve();await pending;
+  assert.equal(rx.state.live,false);assert.equal(rx.state.activeInput,'none');
+}
+{
+  const rx=receiver();rx.state.setupGate=deferred();const pending=rx.startLive();
+  rx.permission.resolve(rx.capture);await settle();
+  const error=new Error('Audio setup failed');error.name='NotAllowedError';rx.state.setupGate.reject(error);await pending;
+  assert.equal(rx.track.stopped,true);assert.equal(rx.state.openingLive,false);assert.equal(rx.dialogs.length,0);
+  assert.equal(rx.messages.at(-1).message,'Audio setup failed');assert.equal(rx.messages.at(-1).error,true);
+}
+
+// Unsupported/blocked contexts explain the actual reason without issuing a
+// permission request or disrupting an already playing recording.
+for(const [configure,expected]of [
+  [rx=>rx.state.window.isSecureContext=false,/requires HTTPS or localhost/],
+  [rx=>rx.state.navigator.mediaDevices=undefined,/unavailable in this browser/],
+  [rx=>rx.state.document.permissionsPolicy={allowsFeature:()=>false},/Permissions Policy/],
+]){
+  const rx=receiver();await rx.loadFile({name:'keep.wav'});await rx.togglePlayback();const url=rx.state.fileUrl;
+  configure(rx);await rx.startLive();assert.equal(rx.requests.length,0);assert.equal(rx.state.openingLive,false);
+  assert.equal(rx.state.fileUrl,url);assert.equal(rx.audio.paused,false);assert.equal(rx.state.activeInput,'file');
+  assert.match(rx.messages.at(-1).message,expected);assert.equal(rx.messages.at(-1).error,true);
+}
+
+for(const [name,expected]of [['NotFoundError',/selected microphone is unavailable/],['OverconstrainedError',/Default audio input/],['NotReadableError',/microphone could not be opened/]]){
+  const rx=receiver();const pending=rx.startLive();const error=new Error('Capture failed');error.name=name;
+  rx.permission.reject(error);await pending;assert.match(rx.messages.at(-1).message,expected);
+  assert.equal(rx.messages.at(-1).error,true);assert.equal(rx.state.openingLive,false);assert.equal(rx.dialogs.length,0);
+}
+
+console.log('Passed: exclusive audio sources, immediate capture requests, permission diagnostics, and capture/setup cancellation.');
