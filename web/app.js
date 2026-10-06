@@ -3,14 +3,30 @@ import {rttyPresets} from './rtty-presets.js';
 import {defaults, validatedConfig, storageKey} from './configuration.js';
 import {appendReceivedText} from './received-text.js';
 import {createScope} from './scope.js';
+import {createWorkflowFilter,parseWorkflow} from './workflow.js';
 
 const $ = id => document.getElementById(id);
+const workflow=parseWorkflow(window.location.search);
+let workflowCatalog;
+try{
+  const response=await fetch(new URL('./workflow.json',import.meta.url));
+  if(!response.ok)throw new Error('HTTP '+response.status);
+  workflowCatalog=await response.json();
+}catch(error){
+  $('status-message').textContent='Cannot load UI workflows. Reload the page to try again.';
+  throw error;
+}
+const workflowUI=createWorkflowFilter(workflowCatalog,workflow,document);
+const decodeEnabled=workflowUI.includes('decode'),encodeEnabled=workflowUI.includes('encode');
+document.documentElement.dataset.workflow=workflow;
+workflowUI.apply();
 // Stable IDs for dynamically created controls cataloged in workflow.json.
 const controlId = (prefix,name) => prefix+'-'+encodeURIComponent(name);
 // fldigi 4.2.13 comments out its OFDM Op Mode submenu pending development;
 // its generated mode table still contains these entries and unavailable utility modes.
 const sourceDisabledModes=new Set(['OFDM500F','OFDM750F','OFDM3500']);
 const selectableMode=mode=>mode.enabled&&!sourceDisabledModes.has(mode.name);
+const workflowMode=mode=>selectableMode(mode)&&workflowUI.allows(controlId('mode',mode.name));
 // Intentional UI-only deviation from the fldigi source label: make Morse explicit.
 const displayModeName=mode=>mode.name==='CW'?'CW (morse)':mode.label;
 const dtmfSelected=()=>settings.modeName==='DTMF';
@@ -37,14 +53,14 @@ window.addEventListener('error',event=>logEvent(event.message,true));
 window.addEventListener('unhandledrejection',event=>logEvent(event.reason?.message||String(event.reason),true));
 function status(message,error=false){$('status-message').textContent=message;$('status-message').classList.toggle('error',error);logEvent(message,error);}
 function saveSettings(){try{localStorage.setItem(storageKey,JSON.stringify(settings));}catch{status('Configuration could not be saved in browser storage.',true);}}
-function postDecoder(data,transfers=[]){worker.postMessage({...data,generation:audioGeneration},transfers);}
+function postDecoder(data,transfers=[]){if(decodeEnabled)worker.postMessage({...data,generation:audioGeneration},transfers);}
 function resetAudioPipeline(source='none'){
   activeInput=source;audioGeneration++;postDecoder({type:'reset'});
   latestSpectrum=undefined;scopeDisplay.reset();
   for(const [kind,node]of [['file',fileWorklet],['live',liveWorklet]])node?.port.postMessage({command:'reset',generation:audioGeneration,active:kind===source&&(kind!=='file'||!audio.paused&&!audio.seeking)});
 }
 function configureDecoder(retune=false){
-  if(!workerReady)return;
+  if(!decodeEnabled||!workerReady)return;
   if(configuredMode!==settings.mode){configuredMode=settings.mode;resetAudioPipeline(activeInput);retune=true;}
   postDecoder({type:'configure',settings,retune,sequence:++configureSequence});
 }
@@ -61,20 +77,29 @@ function setSquelch(value){
 }
 function applySettings(persist=true){
   document.documentElement.style.setProperty('--rx',settings.rxColor);
+  document.documentElement.style.setProperty('--tx',settings.txColor);
   $('rx-text').style.fontFamily=`${settings.rxFont}, monospace`;$('rx-text').style.fontSize=settings.rxFontSize+'px';$('tx-text').style.fontSize=settings.rxFontSize+'px';
   $('rx-text').style.whiteSpace=settings.rxWrap?'pre-wrap':'pre';$('rx-text').wrap=settings.rxWrap?'soft':'off';
-  $('window-title').textContent='fldigi - NO CALLSIGN SET (receive-only alpha)';
+  $('window-title').textContent=workflow==='decode'?'fldigi - NO CALLSIGN SET (receive-only alpha)':`fldigi - NO CALLSIGN SET (${workflow} workflow)`;
+  document.title=$('window-title').textContent;
+  $('tx-text').setAttribute('aria-label',encodeEnabled?'Transmit text':'Transmit text (disabled)');
+  $('tx-text').title=encodeEnabled?'Text to encode; audio generation is not implemented yet':'Transmission is disabled in this receive version';
+  $('source-indicator').textContent=decodeEnabled?(live?'LIVE':fileUrl?'FILE':'RX'):'TX';
   $('sideband').value=settings.sideband;
+  $('sideband').setAttribute('aria-label',decodeEnabled?'Receive sideband':'Transmit sideband');
+  $('sideband').title='Sideband of the audio signal; changes modem polarity';
+  $('frequency').setAttribute('aria-label',decodeEnabled?'Receive audio frequency':'Transmit audio frequency');
   $('channel-panel').classList.toggle('hidden-panel',!settings.showChannels);$('scope').classList.toggle('hidden-panel',!settings.showScope);
   for(const key of ['reference','span'])$(key).value=settings[key];syncSquelchControls();syncFrequencyInputs();
   $('channel-squelch').value=settings.channelSquelch;$('channel-squelch-label').textContent=Number(settings.channelSquelch).toFixed(1);
   for(const key of ['afc','sql','reverse'])$(key).setAttribute('aria-pressed',String(settings[key]));
   $('magnification').textContent='x'+settings.magnification;$('waterfall-speed').textContent=settings.speed;
-  const mode=modes.find(m=>m.name===settings.modeName&&selectableMode(m))||modes.find(m=>m.name===defaults.modeName&&selectableMode(m));
+  const mode=modes.find(m=>m.name===settings.modeName&&workflowMode(m))||modes.find(m=>m.name===defaults.modeName&&workflowMode(m));
   if(mode){settings.modeName=mode.name;settings.mode=mode.id;$('current-mode').textContent=displayModeName(mode);}
   const dtmf=dtmfSelected();
-  for(const id of ['frequency','frequency-top','afc','sql','reverse','sideband'])$(id).disabled=dtmf;
-  document.querySelectorAll('[data-tune]').forEach(button=>button.disabled=dtmf);
+  for(const id of ['frequency','frequency-top','afc','sql','reverse','sideband'])workflowUI.setRuntimeDisabled(id,dtmf);
+  document.querySelectorAll('[data-tune]').forEach(button=>workflowUI.setRuntimeDisabled(button.id,dtmf));
+  workflowUI.apply();
   $('waterfall').setAttribute('aria-label',dtmf?'Audio waterfall; DTMF uses fixed tone frequencies':'Audio waterfall; hover to preview, click to tune');
   $('sql').title=dtmf?'DTMF always uses the squelch threshold':'Enable squelch gating';
   if(dtmf){hoverPointer=undefined;clearTimeout(cursorHideTimer);$('waterfall').style.cursor='default';}
@@ -147,16 +172,18 @@ function buildModeMenu(){
   const dtmf=modes.find(mode=>mode.family==='DTMF'&&selectableMode(mode));
   if(dtmf){const button=document.createElement('button');button.id=controlId('mode',dtmf.name);button.textContent=displayModeName(dtmf);button.addEventListener('click',()=>selectMode(dtmf));$('mode-options').append(document.createElement('hr'),button);}
   bindMenuBranches($('mode-options'));
+  workflowUI.apply();
 }
-function selectMode(mode){settings.modeName=mode.name;settings.mode=mode.id;applySettings();closeMenus();status(`${displayModeName(mode)} · ${live?'Live audio':fileUrl?'Audio file ready':'Receiver ready'}`);}
+function selectMode(mode){if(!workflowMode(mode))return;settings.modeName=mode.name;settings.mode=mode.id;applySettings();closeMenus();status(`${displayModeName(mode)} · ${decodeEnabled?(live?'Live audio':fileUrl?'Audio file ready':'Receiver ready'):'Audio generation is not implemented yet'}`);}
 const channelRows=Array.from({length:30},(_,index)=>{const row=document.createElement('div');row.id=controlId('channel-row',index+1);row.className='channel-row';const f=document.createElement('span');f.className='channel-frequency';const text=document.createElement('span');row.append(f,text);row.addEventListener('click',()=>{if(row.dataset.frequency)tune(row.dataset.frequency);});$('channel-list').append(row);return row;});
 const worker=new Worker(new URL('./decoder-worker.js',import.meta.url),{type:'module'});
 worker.onerror=event=>{status('Decoder failed to start. Run the Emscripten build and serve this page over localhost or HTTPS.',true);console.error(event.message);};
 worker.onmessage=({data})=>{
   if(data.generation!==undefined&&data.generation!==audioGeneration)return;
-  if(data.type==='ready'){workerReady=true;modes=data.modes;const mode=modes.find(m=>m.name===settings.modeName&&selectableMode(m))||modes.find(m=>m.name==='BPSK31');settings.modeName=mode.name;settings.mode=mode.id;buildModeMenu();applySettings();status('Receiver ready · File → Audio → Playback, or Rx for mic capture');}
-  else if(data.type==='configured'){if(data.sequence!==configureSequence)return;latestRate=data.rate;latestBandwidth=data.bandwidth;latestGeometry=data.geometry;scopeDisplay.update(data.scope);settings.frequency=data.frequency;syncFrequencyInputs();$('status1').textContent=data.status1||'';$('status2').textContent=data.status2||'';updateTuningCursor();if(data.imageWidth&&data.imageSerial!==pictureSerial){drawPicture({...data,imageUpdates:new Uint32Array(0)},false);}}
+  if(data.type==='ready'){workerReady=true;modes=data.modes;const mode=modes.find(m=>m.name===settings.modeName&&workflowMode(m))||modes.find(m=>m.name==='BPSK31');settings.modeName=mode.name;settings.mode=mode.id;buildModeMenu();applySettings();status(decodeEnabled?'Receiver ready · File → Audio → Playback, or Rx for mic capture':'Encode workflow · Audio generation is not implemented yet');}
   else if(data.type==='error'){status(data.message,true);}
+  else if(!decodeEnabled)return;
+  else if(data.type==='configured'){if(data.sequence!==configureSequence)return;latestRate=data.rate;latestBandwidth=data.bandwidth;latestGeometry=data.geometry;scopeDisplay.update(data.scope);settings.frequency=data.frequency;syncFrequencyInputs();$('status1').textContent=data.status1||'';$('status2').textContent=data.status2||'';updateTuningCursor();if(data.imageWidth&&data.imageSerial!==pictureSerial){drawPicture({...data,imageUpdates:new Uint32Array(0)},false);}}
   else if(data.type==='decoded'){
     if(data.text){$('rx-text').value=appendReceivedText($('rx-text').value,data.text);$('rx-text').scrollTop=$('rx-text').scrollHeight;}
     if(data.secondary){$('secondary-text').hidden=false;$('secondary-text').textContent=appendReceivedText($('secondary-text').textContent,data.secondary,200);}
@@ -197,6 +224,7 @@ function connectInput(input,isFile){
   const gain=audioContext.createGain();gain.gain.value=isFile?settings.playbackVolume:0;
   input.connect(worklet);worklet.connect(gain);gain.connect(audioContext.destination);
   worklet.port.onmessage=({data})=>{
+    if(!decodeEnabled)return;
     if(data.generation!==audioGeneration||worklet!==(activeInput==='file'?fileWorklet:activeInput==='live'?liveWorklet:undefined))return;
     if(data.type==='flushed'){if(data.finished){postDecoder({type:'audio',samples:new Float32Array(audioContext.sampleRate*2),rate:audioContext.sampleRate});postDecoder({type:'flush'});}return;}
     if(!workerReady)return;let sum=0;const amp=Math.pow(10,settings.inputGain/20);
@@ -212,6 +240,7 @@ function stopLive(){
   stream?.getTracks().forEach(track=>track.stop());stream=undefined;liveSource?.disconnect();liveWorklet?.disconnect();liveGain?.disconnect();liveSource=liveWorklet=liveGain=undefined;live=false;document.body.classList.remove('live');$('rx-button').setAttribute('aria-pressed','false');$('source-indicator').textContent=fileUrl?'FILE':'RX';
 }
 async function startLive(){
+  if(!decodeEnabled)return;
   if(live||openingLive){stopLive();status('Live audio stopped');return;}
   try{ensureReady();ensureMicrophoneAccess();}catch(error){status(error.message,true);return;}
   const generation=++sourceGeneration;openingLive=true;captureDeviceSelection=settings.inputDevice;
@@ -231,11 +260,13 @@ async function startLive(){
   }catch(error){if(generation!==sourceGeneration)return;stopLive();status(error.message,true);}
 }
 async function loadFile(file){
+  if(!decodeEnabled)return;
   try{ensureReady();stopLive();resetAudioPipeline('none');audio.pause();if(fileUrl)URL.revokeObjectURL(fileUrl);fileUrl=URL.createObjectURL(file);audio.src=fileUrl;$('file-name').textContent=file.name;$('file-name').title=file.name;$('playback-bar').hidden=false;$('source-indicator').textContent='FILE';syncPlaybackButton();
     const selectedUrl=fileUrl;await context();if(fileUrl!==selectedUrl)return;if(!fileSource){fileSource=audioContext.createMediaElementSource(audio);({worklet:fileWorklet,gain:fileGain}=connectInput(fileSource,true));}if(audio.paused)status(`${file.name} · Press ▶ to play and decode`);}
   catch(error){status(error.message,true);}
 }
 async function togglePlayback(){
+  if(!decodeEnabled)return;
   if(!fileUrl||live||openingLive)return;
   const selectedUrl=fileUrl;
   try{ensureReady();await context();if(fileUrl!==selectedUrl||live||openingLive)return;if(audio.paused)await audio.play();else audio.pause();}
@@ -246,11 +277,11 @@ function closeFile(){
   const previousUrl=fileUrl;fileUrl=undefined;audio.pause();audio.removeAttribute('src');audio.load();if(previousUrl)URL.revokeObjectURL(previousUrl);
   $('playback-bar').hidden=true;$('file-name').textContent=$('file-name').title='';$('file-position').value=0;$('file-time').textContent='0:00 / 0:00';$('source-indicator').textContent=live?'LIVE':'RX';syncPlaybackButton();
 }
-function stopAudio(){stopLive();resetAudioPipeline('none');audio.pause();if(fileUrl&&audio.currentTime!==0)audio.currentTime=0;status('Audio stopped');}
+function stopAudio(){if(!decodeEnabled)return;stopLive();resetAudioPipeline('none');audio.pause();if(fileUrl&&audio.currentTime!==0)audio.currentTime=0;status('Audio stopped');}
 function formatTime(seconds){if(!Number.isFinite(seconds))return '0:00';return Math.floor(seconds/60)+':'+String(Math.floor(seconds%60)).padStart(2,'0');}
 function syncPlaybackButton(){const playing=!audio.paused&&!audio.ended;$('play-file').textContent=playing?'Ⅱ':'▶';$('play-file').setAttribute('aria-label',playing?'Pause playback':'Play audio file');$('play-file').title=playing?'Pause playback':'Play audio file';}
 for(const eventName of ['play','pause','ended','emptied'])audio.addEventListener(eventName,syncPlaybackButton);
-audio.addEventListener('play',()=>{if(!fileUrl||live||openingLive){audio.pause();return;}if(activeInput!=='file')resetAudioPipeline('file');fileWorklet?.port.postMessage({active:!audio.seeking,generation:audioGeneration});$('source-indicator').textContent='FILE';status('Playing and decoding: '+$('file-name').textContent);});
+audio.addEventListener('play',()=>{if(!decodeEnabled||!fileUrl||live||openingLive){audio.pause();return;}if(activeInput!=='file')resetAudioPipeline('file');fileWorklet?.port.postMessage({active:!audio.seeking,generation:audioGeneration});$('source-indicator').textContent='FILE';status('Playing and decoding: '+$('file-name').textContent);});
 audio.addEventListener('pause',()=>{if(!audio.paused||activeInput!=='file'||audio.seeking)return;fileWorklet?.port.postMessage({command:'flush',generation:audioGeneration});if(fileUrl)status('Audio playback paused');});
 audio.addEventListener('timeupdate',()=>{$('file-position').value=Number.isFinite(audio.duration)?audio.currentTime/audio.duration*1000:0;$('file-time').textContent=formatTime(audio.currentTime)+' / '+formatTime(audio.duration);});
 audio.addEventListener('loadedmetadata',()=>{$('file-time').textContent='0:00 / '+formatTime(audio.duration);});
@@ -267,7 +298,8 @@ function setSpeakerIcon(muted){
 }
 $('file-mute').addEventListener('click',()=>{const muted=$('file-mute').getAttribute('aria-pressed')!=='true';$('file-mute').setAttribute('aria-pressed',String(muted));setSpeakerIcon(muted);if(fileGain)fileGain.gain.value=muted?0:settings.playbackVolume;});
 $('close-file').addEventListener('click',()=>{closeFile();status(live?'Live audio capture active':'Receiver ready');});
-$('rx-button').addEventListener('click',startLive);$('source-indicator').addEventListener('click',()=>fileUrl?togglePlayback():startLive());
+$('rx-button').addEventListener('click',startLive);$('source-indicator').addEventListener('click',()=>decodeEnabled?(fileUrl?togglePlayback():startLive()):generateAudio());
+function generateAudio(){if(encodeEnabled)showMessage('Generate audio','Audio generation and file export are not implemented yet. You can prepare transmit text and modem settings in this workflow.');}
 function download(name,data,type){const url=URL.createObjectURL(new Blob([data],{type}));const link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);status('Download requested: '+name);}
 function drawRaster(columns,height){
   const width=Math.max(1,Math.floor(rasterCanvas.clientWidth));const ctx=rasterCanvas.getContext('2d');
@@ -304,6 +336,7 @@ async function showBuildInfo(){
   }catch(error){showMessage('Build info',error.message);}
 }
 const actions={
+  'generate-audio':generateAudio,
   'show-picture':()=>pictureData?$('picture-dialog').showModal():status('No image has been received yet'),
   'open-audio':()=>$('audio-upload').click(),live:startLive,stop:stopAudio,
   'export-text':()=>download('fldigi-received.txt',$('rx-text').value,'text/plain;charset=utf-8'),clear:()=>{$('rx-text').value='';$('secondary-text').textContent='';},
@@ -314,8 +347,8 @@ const actions={
   'clear-channels':()=>{postDecoder({type:'clear-channels'});channelRows.forEach(row=>{row.children[0].textContent=row.children[1].textContent='';});},
   'audio-info':showAudioInfo,'build-info':showBuildInfo,
   'event-log':()=>showMessage('Event log',eventLog.map(entry=>`${entry.time}  ${entry.error?'ERROR':'INFO'}  ${entry.message}`).join('\n')||'No events recorded in this session.','fldigi-event-log.txt'),
-  help:()=>showMessage('fldigi browser receiver','Use File → Audio → Playback (load audio file) to select a recording, then press ▶. Choose RX capture (use mic), click Rx, or press F3 for live microphone or audio-device input. Starting mic capture closes the loaded recording; loading a recording stops mic capture. TX generate (save audio file) is disabled for now.\n\nSelect the signal mode under Op Mode, then click a signal in the waterfall to tune. AFC follows frequency drift. SQL suppresses output below the selected signal threshold.\n\nDTMF is at the bottom of Op Mode, below the separator. It exclusively decodes keypad tones using fixed audio frequencies; tuning is inactive. The squelch threshold always applies. Switching modes disables DTMF.\n\nConfigure → Sound card chooses the input channel, input device, gain, and sample-rate correction. Configuration is saved in this browser. File exports download a file; imports use a file picker.\n\nCapture requires HTTPS or localhost. Audio remains on this computer. Transmission, rig control, and external application connections are disabled. Decoder state resets when seeking in a recording.'),
-  about:()=>showMessage('About fldigi','fldigi 4.2.13-alpha0 · Browser receive port\n\nOriginal fldigi modem and DSP sources by Dave Freese, W1HKJ, and the fldigi contributors. Compiled with Emscripten.\n\nGNU GPL version 3 or later. Corresponding source and build scripts are included in this project. See COPYING and THIRD_PARTY_NOTICES.md.\n\nThis version supports microphone input and local audio-file playback. Unavailable modes and desktop controls are shown disabled.\n\nIcons: original fldigi artwork and Font Awesome Free 7.2.0 by Fonticons, Inc. (CC BY 4.0). See THIRD_PARTY_NOTICES.md and icons/fontawesome/LICENSE.txt for the icon notices.'),
+  help:()=>showMessage('fldigi browser receiver','Use File → Audio → Playback (load audio file) to select a recording, then press ▶. Choose RX capture (use mic), click Rx, or press F3 for live microphone or audio-device input. Starting mic capture closes the loaded recording; loading a recording stops mic capture. Choose ?workflow=encode, ?workflow=both, or ?workflow=full to enable transmit controls. Audio generation and file export are not implemented yet.\n\nSelect the signal mode under Op Mode, then click a signal in the waterfall to tune. AFC follows frequency drift. SQL suppresses output below the selected signal threshold.\n\nDTMF is at the bottom of Op Mode, below the separator. It exclusively decodes keypad tones using fixed audio frequencies; tuning is inactive. The squelch threshold always applies. Switching modes disables DTMF.\n\nConfigure → Sound card chooses the input channel, input device, gain, and sample-rate correction. Configuration is saved in this browser. File exports download a file; imports use a file picker.\n\nCapture requires HTTPS or localhost. Audio remains on this computer. Audio generation, rig control, and external application connections are not implemented. Decoder state resets when seeking in a recording.'),
+  about:()=>showMessage('About fldigi','fldigi 4.2.13-alpha0 · Browser receive port\n\nOriginal fldigi modem and DSP sources by Dave Freese, W1HKJ, and the fldigi contributors. Compiled with Emscripten.\n\nGNU GPL version 3 or later. Corresponding source and build scripts are included in this project. See COPYING and THIRD_PARTY_NOTICES.md.\n\nThis version supports microphone input and local audio-file playback in decode, both, and full workflows. Workflow tags control UI availability. Planned audio-generation and desktop features remain unimplemented.\n\nIcons: original fldigi artwork and Font Awesome Free 7.2.0 by Fonticons, Inc. (CC BY 4.0). See THIRD_PARTY_NOTICES.md and icons/fontawesome/LICENSE.txt for the icon notices.'),
 };
 document.querySelectorAll('[data-action]').forEach(button=>button.addEventListener('click',()=>{closeMenus();actions[button.dataset.action]?.();}));
 document.querySelectorAll('[data-close-dialog]').forEach(button=>button.addEventListener('click',()=>$(button.dataset.closeDialog).close()));
@@ -337,7 +370,7 @@ $('sideband').addEventListener('change',event=>{settings.sideband=event.target.v
 $('channel-squelch').addEventListener('input',event=>{settings=validatedConfig({...settings,channelSquelch:Number(event.target.value)});$('channel-squelch-label').textContent=settings.channelSquelch.toFixed(1);configureDecoder();saveSettings();});
 $('channel-search').addEventListener('keydown',event=>{if(event.key==='Enter'){const row=channelRows.find(r=>r.children[1].textContent.toUpperCase().includes(event.target.value.toUpperCase())&&r.dataset.frequency);if(row)tune(row.dataset.frequency);}});
 $('current-mode').addEventListener('click',()=>{closeMenus();$('mode-menu').classList.add('open');$('mode-menu').querySelector('.menu-heading').setAttribute('aria-expanded','true');});
-$('store-frequency').addEventListener('click',()=>{saveSettings();status('Receive frequency stored: '+Math.round(settings.frequency)+' Hz');});
+$('store-frequency').addEventListener('click',()=>{saveSettings();status('Audio frequency stored: '+Math.round(settings.frequency)+' Hz');});
 $('magnification').addEventListener('click',()=>{settings.magnification=settings.magnification===4?1:settings.magnification*2;applySettings();});
 $('waterfall-speed').addEventListener('click',()=>{settings.speed=settings.speed==='NORM'?'FAST':settings.speed==='FAST'?'SLOW':'NORM';applySettings();});
 $('waterfall-pause').addEventListener('click',()=>{waterfallPaused=!waterfallPaused;$('waterfall-pause').setAttribute('aria-pressed',String(waterfallPaused));$('waterfall-pause').textContent=waterfallPaused?'▶':'Ⅱ';});
@@ -402,10 +435,15 @@ function drawWaterfall(add=true){
 }
 function drawScope(){scopeDisplay.draw();}
 new ResizeObserver(resizeCanvases).observe($('waterfall').parentElement);
-async function refreshDevices(){try{devices=(await navigator.mediaDevices.enumerateDevices()).filter(device=>device.kind==='audioinput');if($('configuration').open&&configPage==='Soundcard/Devices')renderConfigPage();}catch{devices=[];}}
+async function refreshDevices(){if(!decodeEnabled)return;try{devices=(await navigator.mediaDevices.enumerateDevices()).filter(device=>device.kind==='audioinput');if($('configuration').open&&configPage==='Soundcard/Devices')renderConfigPage();}catch{devices=[];}}
 const configSections=[['Configure'],['Colors-Fonts'],['Contests',true],['IDs',true],['Logging',true],['Modem'],['Modem/PSK'],['Modem/RTTY'],['Modem/CW'],['Modem/MFSK'],['Modem/THOR'],['Modem/DominoEX'],['Modem/Throb'],['Modem/MT63'],['Modem/FSQ'],['Modem/Hellschreiber'],['Modem/IFKP'],['Modem/WEFAX'],['Modem/Olivia'],['Modem/Contestia'],['Misc'],['Operator-Station'],['Rig Control',true],['Soundcard'],['Soundcard/Devices'],['Soundcard/Right channel'],['Soundcard/Settings'],['Soundcard/Signal Level'],['Soundcard/Wav file recording',true],['UI'],['Waterfall'],['Web',true],['Autostart',true],['IO',true]];
 const collapsedSections=new Set();
 const treeGroups=['Modem','Soundcard'];
+function preferredConfigPage(page){
+  const soundcard=decodeEnabled?'Soundcard/Devices':'Soundcard/Settings';
+  const name=page==='Configure'?(workflowUI.includes('rig')?'Operator-Station':soundcard):page==='Soundcard'?soundcard:page==='Modem'?'Modem/PSK':page||soundcard;
+  return workflowUI.allows(controlId('config-page',name))?name:soundcard;
+}
 function renderTree(){
   const tree=$('config-tree');tree.replaceChildren();
   function addSection(container,name,disabled,children=[]){
@@ -415,11 +453,12 @@ function renderTree(){
       toggle.addEventListener('click',()=>{if(collapsedSections.has(name))collapsedSections.delete(name);else collapsedSections.add(name);renderTree();Array.from(tree.querySelectorAll('.tree-toggle')).find(button=>button.dataset.section===name)?.focus();});row.append(toggle);
     }else{const connector=document.createElement('span');connector.className='tree-connector';connector.textContent='┊';connector.setAttribute('aria-hidden','true');row.append(connector);}
     const button=document.createElement('button');button.id=controlId('config-page',name);button.textContent=name.split('/').at(-1);button.className='tree-label';button.disabled=Boolean(disabled);button.classList.toggle('active',name===configPage);button.dataset.page=name;
-    button.addEventListener('click',()=>{configPage=name==='Configure'?'Operator-Station':name==='Soundcard'?'Soundcard/Devices':name==='Modem'?'Modem/PSK':name;renderTree();renderConfigPage();});row.append(button);container.append(row);
+    button.addEventListener('click',()=>{configPage=preferredConfigPage(name);renderTree();renderConfigPage();});row.append(button);container.append(row);
     if(children.length){const group=document.createElement('div');group.className='tree-children';group.hidden=collapsedSections.has(name);group.setAttribute('role','group');group.setAttribute('aria-label',name+' sections');for(const [child,unavailable]of children)addSection(group,child,unavailable,configSections.filter(([section])=>section.startsWith(child+'/')));container.append(group);}
   }
   addSection(tree,'Configure',false,configSections.filter(([name])=>name!=='Configure'&&!name.includes('/')));
   $('collapse-tree').textContent=collapsedSections.has('Configure')||treeGroups.every(name=>collapsedSections.has(name))?'Expand Tree':'Collapse Tree';
+  workflowUI.apply();
 }
 function configField(label,key,type='text',options,disabled=false){
   const row=document.createElement('div');row.className='config-row';const caption=document.createElement('label');caption.textContent=label;caption.htmlFor='config-'+key;row.append(caption);let input;
@@ -463,8 +502,10 @@ function renderConfigPage(){
   else if(configPage==='Modem/Olivia'||configPage==='Modem/Contestia'){const prefix=configPage==='Modem/Olivia'?'olivia':'contestia';body.append(fieldset('Receive',[configField('Bandwidth (Hz)',prefix+'Bandwidth','text',[125,250,500,1000,2000].map((v,i)=>[i,v])),configField('Tones',prefix+'Tones','text',[2,4,8,16,32,64].map((v,i)=>[i,v])),configField('Integration',prefix+'Integration','number'),configField('Search margin',prefix+'Margin','number'),...(prefix==='contestia'?[configField('Lower case','lowercase','checkbox')]:[])]));body.append(note('Bandwidth and tones configure the generic mode. Named variants in Op Mode retain their original settings.'));}
   else if(configPage.startsWith('Modem/')){body.append(fieldset('Receive',[configField('AFC','afc','checkbox'),configField('Squelch','sql','checkbox'),configField('Squelch level','squelch','number')]));body.append(note('Select a tone count and bandwidth variant under Op Mode. Additional desktop receive options are not yet exposed for this page.'));}
   else if(configPage==='Misc'){body.append(fieldset('Receive',[configField('Lower case','lowercase','checkbox'),configField('Channel squelch','channelSquelch','number'),note('Lower case applies to RTTY, Throb, and Contestia.')]));}
+  else{body.append(note('This desktop feature is not implemented in the browser version.'));}
+  workflowUI.apply();
 }
-function openConfig(page){closeMenus();configDraft={...settings};configPage=page||'Soundcard/Devices';collapsedSections.delete('Configure');collapsedSections.delete(configPage.split('/')[0]);renderTree();renderConfigPage();$('configuration').showModal();refreshDevices();}
+function openConfig(page){closeMenus();configDraft={...settings};configPage=preferredConfigPage(page);collapsedSections.delete('Configure');collapsedSections.delete(configPage.split('/')[0]);renderTree();renderConfigPage();$('configuration').showModal();refreshDevices();}
 document.querySelectorAll('[data-config]').forEach(button=>button.addEventListener('click',()=>openConfig(button.dataset.config)));
 $('restore-defaults').addEventListener('click',()=>{configDraft={...defaults};renderConfigPage();});
 $('save-config').addEventListener('click',()=>{for(const input of $('config-fields').querySelectorAll('input:not(:disabled),select:not(:disabled)')){const key=input.id.slice(7);if(Object.hasOwn(defaults,key))configDraft[key]=input.type==='checkbox'?input.checked:typeof defaults[key]==='number'?Number(input.value):input.value;}settings=validatedConfig(configDraft);applySettings();configDraft={...settings};status('Configuration saved');});
@@ -472,9 +513,9 @@ $('collapse-tree').addEventListener('click',()=>{const expand=collapsedSections.
 document.addEventListener('keydown',event=>{
   if(event.key==='Escape'){closeMenus();return;}
   if(event.key.toLowerCase()==='a'&&!event.ctrlKey&&!event.altKey&&!event.metaKey&&!event.target.matches('input,textarea,select')&&!document.querySelector('dialog[open]')){event.preventDefault();closeMenus();actions.about();return;}
-  if(event.key==='F3'){event.preventDefault();startLive();}
-  if(event.ctrlKey&&event.key.toLowerCase()==='o'){event.preventDefault();$('audio-upload').click();}
-  if(event.ctrlKey&&event.key.toLowerCase()==='s'){event.preventDefault();actions['export-text']();}
+  if(event.key==='F3'){event.preventDefault();if(decodeEnabled)startLive();}
+  if(event.ctrlKey&&event.key.toLowerCase()==='o'){event.preventDefault();if(decodeEnabled)$('audio-upload').click();}
+  if(event.ctrlKey&&event.key.toLowerCase()==='s'){event.preventDefault();if(decodeEnabled)actions['export-text']();}
   if(event.altKey&&event.key.toLowerCase()==='c'){event.preventDefault();openConfig();}
   if(event.code==='Space'&&!event.target.matches('input,textarea,select,button')&&!$('configuration').open&&fileUrl){event.preventDefault();togglePlayback();}
 });

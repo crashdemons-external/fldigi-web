@@ -29,7 +29,8 @@ Some distinctions are intentional even though the feature is disabled today:
   page therefore carries both tags.
 - KPSQL and capture sample-rate selection are `decode`; their disabled states do
   not make them utilities.
-- T/R switches carry both tags; Tx macros carry `encode`. The shipped CQ, ANS,
+- T/R switches and Tx macros carry only `encode`, so they are enabled in the
+  encode, both, and full workflows and disabled in decode. The shipped CQ, ANS,
   QSO, KN, SK, Me/Qth, and Brag macros are intended for on-air contacts and carry
   `rig`. The empty macro slot is `util` until it has an assigned purpose.
 - Transmit frequency lock carries both tags because it relates receive and
@@ -60,15 +61,42 @@ additional application controls. Decorative artwork, window symbols, cursor
 geometry, and layout-only containers are excluded. Useful composite displays
 such as the channel panel, playback bar, and fax controls are included.
 
-This catalog does **not** change availability or implement workflow filtering.
-Future filtering should match the union of selected tags, preserve current
-capability checks and mode-specific disabled states, and apply again when dynamic
-controls render. An absent element may simply belong to an unopened configuration
-page. A full rig profile should include all four tags; matching `rig` alone would
-select only the radio-specific subset. `encode` is classification, not permission
-to enable an unfinished transmitter.
+The application reads this catalog through `workflow.js` and selects a profile
+from the URL's `workflow` query argument:
+
+| URL value | Enabled tags |
+| --- | --- |
+| `decode` (default) | `decode` |
+| `encode` | `encode` |
+| `both` | `encode`, `decode` |
+| `full` | `encode`, `decode`, `rig`, `util` |
+
+Missing or unknown values select `decode`. Matching controls are enabled even if
+they were disabled in the original receive-only UI; this includes RxID, KPSQL,
+Store, and planned transmit/rig controls. Enabling a control does not implement
+its underlying feature. Audio generation and rig operations remain unimplemented.
+The status message is shared between encoding and decoding because both need
+configuration and error feedback.
+
+Filtering preserves the layout, grays disabled controls, removes disabled links
+and scope controls from keyboard focus, exposes disabled states to accessibility
+APIs, and prevents their input handlers from running. It reapplies after settings,
+modem menus, configuration trees, and configuration pages render. Mode-specific
+restrictions also apply: DTMF disables tuning, sideband, AFC, SQL, and reverse.
+An absent element may belong to an unopened configuration page. Native modes
+omitted from the browser's mode menu remain omitted in every workflow.
+
+Encode-only blocks microphone requests, audio-file loading/playback, audio and
+configuration messages to the decoder, decoded reports, and receive keyboard
+shortcuts. The worker loads the modem list for shared mode selection; it receives
+no decoding requests. The transmit editor accepts text and uses the configured
+fldigi transmit background color. Generating audio shows a message explaining
+that audio generation and export are not implemented yet.
 
 `node tests/workflow.test.mjs` checks tag validity, stable and unique identifiers,
 complete static-control coverage, every configuration page, generated modem
 menus/presets and channel rows, and catalog entries without a UI counterpart.
-The static-site packager includes this JSON and documentation automatically.
+`node tests/workflow-filter.test.mjs` checks profile selection, the full tag union,
+runtime restrictions, dynamic replacement, and disabled event handling. The audio
+source tests also verify encode-only decoder isolation. The static-site packager
+includes the catalog, workflow module, and documentation automatically.

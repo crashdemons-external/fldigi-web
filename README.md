@@ -10,6 +10,15 @@ The UI workflow catalog is in [web/workflow.json](web/workflow.json), with DOM I
 mapped to `decode`, `encode`, `rig`, and `util` tags. See
 [web/workflow.md](web/workflow.md) for classification rules and ID conventions.
 
+Choose the UI workflow with `?workflow=encode`, `?workflow=decode`,
+`?workflow=both`, or `?workflow=full`. The default is `decode`; unknown values
+also use `decode`. `both` enables the union of encoding and decoding controls;
+`full` includes rig and utility controls. Encode-only blocks recording playback,
+microphone capture, and decoding. Matching controls are enabled even when their
+underlying feature is still planned; audio generation, transmission, and rig
+control remain unimplemented. Enabled transmit text and macro colors follow the
+supplied fldigi source and screenshots.
+
 ## Build and run
 
 Install Python 3 and the official [Emscripten SDK](https://emscripten.org/docs/getting_started/downloads.html), with `em++` available on `PATH`. From the project root, build the browser decoder and start the local server:

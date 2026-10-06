@@ -10,13 +10,14 @@ const settle=()=>new Promise(resolve=>setImmediate(resolve));
 
 // Execute the real source-selection functions and event handlers. Only browser
 // APIs are mocked, including permission requests and suspended audio contexts.
-function receiver(){
+function receiver(workflow='decode'){
   class Element {
-    constructor(){this.listeners={};this.attributes={};this.hidden=false;this.textContent='';this.value=0;}
+    constructor(){this.listeners={};this.attributes={};this.hidden=false;this.textContent='';this.value=0;this.clickCalls=0;}
     addEventListener(name,fn){(this.listeners[name]??=[]).push(fn);}
     dispatch(name){for(const fn of this.listeners[name]??=[])fn({target:this});}
     setAttribute(name,value){this.attributes[name]=value;}
     getAttribute(name){return this.attributes[name];}
+    click(){this.clickCalls++;this.dispatch('click');}
   }
   const elements=new Map(),get=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);};
   const audio=new Element();audio.paused=true;audio.ended=false;audio.seeking=false;audio.duration=NaN;audio.currentTime=0;audio.playCalls=0;
@@ -24,7 +25,7 @@ function receiver(){
   audio.pause=()=>{audio.paused=true;};
   audio.removeAttribute=name=>{delete audio[name];};
   audio.load=()=>{audio.paused=true;audio.duration=NaN;audio.currentTime=0;};
-  const permission=deferred(),revoked=[],reports=[],messages=[],dialogs=[],requests=[],bodyClasses=new Set();let urlSerial=0,mediaSources=0;
+  const permission=deferred(),revoked=[],reports=[],messages=[],dialogs=[],requests=[],bodyClasses=new Set(),keyboardListeners={};let urlSerial=0,mediaSources=0;
   class Node {
     constructor(){this.port={postMessage:data=>reports.push(data)};this.gain={value:0};}
     connect(){}
@@ -40,21 +41,25 @@ function receiver(){
   const track={stopped:false,label:'Test microphone',stop(){this.stopped=true;},addEventListener(){},getSettings(){return {};}};
   const capture={getTracks:()=>[track],getAudioTracks:()=>[track]};
   const sandbox={
-    $:get,audio,settings:{...defaults},workerReady:true,live:false,openingLive:false,sourceGeneration:0,audioGeneration:0,activeInput:'none',fileUrl:undefined,
+    $:get,audio,settings:{...defaults},decodeEnabled:workflow!=='encode',encodeEnabled:workflow!=='decode',workerReady:true,live:false,openingLive:false,sourceGeneration:0,audioGeneration:0,activeInput:'none',fileUrl:undefined,
     stream:undefined,liveSource:undefined,liveWorklet:undefined,liveGain:undefined,fileSource:undefined,fileWorklet:undefined,fileGain:undefined,
     audioContext:undefined,audioSetup:undefined,captureDeviceSelection:undefined,latestSpectrum:undefined,
     AudioContext,AudioWorkletNode:Node,Float32Array,scopeDisplay:{reset(){}},worker:{postMessage:data=>reports.push(data)},
     window:{isSecureContext:true},navigator:{mediaDevices:{getUserMedia:constraints=>{requests.push(constraints);return permission.promise;}}},
-    document:{body:{classList:{add:name=>bodyClasses.add(name),remove:name=>bodyClasses.delete(name)}}},
+    document:{body:{classList:{add:name=>bodyClasses.add(name),remove:name=>bodyClasses.delete(name)}},
+      addEventListener:(name,handler)=>keyboardListeners[name]=handler,querySelector:()=>null},
     URL:{createObjectURL:()=>`blob:test-${++urlSerial}`,revokeObjectURL:url=>revoked.push(url)},
     status:(message,error=false)=>messages.push({message,error}),showMessage:(title,message)=>dialogs.push({title,message}),refreshDevices:async()=>{},
+    actions:{'export-text':()=>reports.push('export-text')},closeMenus(){},openConfig(){},
   };
   const api=vm.runInNewContext([
     between('function postDecoder(','function configureDecoder('),
+    between('function configureDecoder(','function syncFrequencyInputs('),
     between('function ensureReady(){','function download('),
-    '({startLive,stopLive,loadFile,togglePlayback,closeFile})',
+    '({startLive,stopLive,loadFile,togglePlayback,closeFile,postDecoder,configureDecoder,generateAudio})',
   ].join('\n'),sandbox);
-  return {...api,state:sandbox,get,audio,permission,capture,track,revoked,reports,messages,dialogs,requests,bodyClasses};
+  vm.runInNewContext(between("document.addEventListener('keydown',event=>{","window.addEventListener('beforeunload'"),sandbox);
+  return {...api,state:sandbox,get,audio,permission,capture,track,revoked,reports,messages,dialogs,requests,bodyClasses,keydown:keyboardListeners.keydown};
 }
 
 // Switching a playing recording to mic removes the file before permission is
@@ -165,4 +170,28 @@ for(const [name,expected]of [['NotFoundError',/selected microphone is unavailabl
   assert.equal(rx.messages.at(-1).error,true);assert.equal(rx.state.openingLive,false);assert.equal(rx.dialogs.length,0);
 }
 
-console.log('Passed: exclusive audio sources, immediate capture requests, permission diagnostics, and capture/setup cancellation.');
+// Encode-only must refuse audio entry points even when called directly, and
+// never forward PCM/configuration or consume stale worker reports.
+{
+  const tx=receiver('encode');
+  await tx.startLive();await tx.loadFile({name:'blocked.wav'});await tx.togglePlayback();
+  tx.postDecoder({type:'audio',samples:new Float32Array(2048),rate:8000});tx.configureDecoder(true);
+  assert.equal(tx.requests.length,0);assert.equal(tx.state.audioContext,undefined);
+  assert.equal(tx.state.fileUrl,undefined);assert.equal(tx.audio.playCalls,0);assert.equal(tx.reports.length,0);
+  for(const properties of [{key:'F3'},{key:'o',ctrlKey:true},{key:'s',ctrlKey:true},{key:' ',code:'Space'}]){
+    let prevented=false;tx.keydown({target:{matches:()=>false},preventDefault(){prevented=true;},...properties});
+    if(properties.code!=='Space')assert.ok(prevented);
+  }
+  assert.equal(tx.get('audio-upload').clickCalls,0);assert.equal(tx.requests.length,0);assert.equal(tx.reports.length,0);
+  tx.audio.dispatch('play');assert.equal(tx.audio.paused,true);
+  vm.runInNewContext(between('worker.onmessage=','function ensureReady(){'),tx.state);
+  tx.state.worker.onmessage({data:{type:'decoded',text:'SHOULD NOT APPEAR'}});
+  tx.state.worker.onmessage({data:{type:'configured',sequence:0}});
+  assert.equal(tx.get('rx-text').value,0);assert.equal(tx.messages.length,0);
+  tx.generateAudio();assert.match(tx.dialogs.at(-1).message,/not implemented/);
+}
+{
+  const rx=receiver('decode');rx.generateAudio();assert.equal(rx.dialogs.length,0);
+}
+
+console.log('Passed: exclusive audio sources, permission diagnostics, capture cancellation, and encode-only decoder isolation.');

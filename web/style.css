@@ -15,6 +15,22 @@ dialog{padding:0;color:#111}.classic-dialog{border:1px solid #656565;border-radi
 .ui-icon{width:16px;height:16px;flex:none;display:inline-block;vertical-align:-3px;fill:currentColor;object-fit:contain}.exact-icon{image-rendering:pixelated}.icon-blue{color:#377ec1}.icon-green{color:#387e39}.icon-button{display:inline-flex;align-items:center;justify-content:center}.icon-button .ui-icon{width:15px;height:15px}.app-icon{display:inline-flex;align-items:center;justify-content:center}.app-icon .ui-icon{width:18px;height:18px;image-rendering:auto}.tiny-icon{display:inline-flex;align-items:center;justify-content:center}.channel-controls button{display:inline-flex;align-items:center;justify-content:center;gap:3px}.playback-bar button .ui-icon{width:14px;height:14px}.help-popup{min-width:230px}.help-popup>.menu-icon-row{display:flex;align-items:center;gap:4px;min-height:20px;padding:1px 4px;line-height:18px}.help-popup kbd{margin-left:auto;padding-left:15px}.help-popup>.menu-icon-row:disabled .ui-icon{filter:grayscale(1);opacity:.5}#message-content{overflow-wrap:anywhere}
 .qso-row.unavailable label,.config-row.unavailable>label{color:#888;text-shadow:1px 1px #fff}.qso-row.unavailable .tiny-icon{filter:grayscale(1);opacity:.5}.config-row.unavailable input[type=color]{filter:grayscale(1);opacity:.6}.tx-pane{background:#eee}.tx-pane textarea:disabled{background:#d6d6d6;color:#a2a2a2}
 
+/* Native fldigi's enabled TX editor uses TxColor; macros retain group colors. */
+.tx-pane textarea:not(:disabled){background:var(--tx,#c4ebfc);color:#181818;text-shadow:none}
+.rx-pane textarea:disabled{background:#d6d6d6;color:#a2a2a2;text-shadow:none}
+.radio-mode select:first-child:disabled{color:#a2a2a2;text-shadow:1px 1px #fff}
+input[type=range]:disabled,.channel-panel.workflow-disabled{filter:grayscale(1)}
+button:disabled .ui-icon{filter:grayscale(1);opacity:.5}
+.indicator:disabled i{background:#aaa!important}
+.menu-popup>a.workflow-disabled{color:#a2a2a2;text-shadow:1px 1px #fff;cursor:default}
+.menu-popup>a.workflow-disabled:hover{background:transparent;color:#a2a2a2}
+.menu-popup>a.workflow-disabled .ui-icon{filter:grayscale(1);opacity:.5}
+canvas.workflow-disabled{filter:grayscale(1);opacity:.5}
+.channel-row.workflow-disabled:hover{background:transparent}
+.channel-list.workflow-disabled{background:#d6d6d6;color:#a2a2a2}
+.dial.workflow-disabled,.statusbar #status1.workflow-disabled,.statusbar #status2.workflow-disabled,span.workflow-disabled,output.workflow-disabled{color:#a2a2a2;text-shadow:1px 1px #fff}
+.signal-meter.workflow-disabled{filter:grayscale(1)}
+
 /* fldigi's reversed vertical Fl_Slider2: 100 at the top, 0 at the bottom. */
 input.squelch-slider{appearance:none;-webkit-appearance:none;writing-mode:vertical-lr;direction:rtl;flex:none;width:12px;min-width:12px;height:100%;min-height:0;box-shadow:none;margin:0;padding:0;background:#303030;border:1px solid #999;border-radius:3px;cursor:ns-resize;touch-action:none}
 input.squelch-slider::-webkit-slider-runnable-track{width:10px;height:100%;background:transparent;border:0}
